@@ -1,13 +1,19 @@
 ## Synthetic population pipeline for Munich
 ## based on the synpp package
 
+run_synthesis: true
+
 # This is the path to a directory where the pipeline can store temporary data
-working_directory: munich/cache
+data_path: ../../data/city_specific/munich/
+working_directory: ../../data/city_specific/munich/cache
 
 # This section defines which parts of the pipeline should be run
+# if run_synthesis:
 run:
   - synthesis.output
-  # - matsim.output
+# else: 
+#   run:
+#     - matsim.output
 
 # Here the configuraiton of the pipeline starts
 config:
@@ -18,16 +24,18 @@ config:
   hts: entd
 
   # Define sampling rate and random seed for the output population
-  sampling_rate: 0.01
+  sampling_rate: 0.001
   random_seed: 1234
  
   # Paths to the input data and where the output should be stored
-  data_path: munich/data
-  output_path: munich/output
+  data_path: ../../data/city_specific/munich/data
+  output_path: ../../data/city_specific/munich/output
   output_prefix: munich_
-  osm_path_bavaria: osm/bayern-latest.osm.pbf
-  osmosis_binary: /opt/homebrew/bin/osmosis
-  osmconvert_binary: munich/data/osm/osmconvert
+  osm_path_bavaria: munich/data/osm/bayern-latest.osm.pbf 
+
+  if not run_synthesis: 
+    osmosis_binary: /opt/homebrew/bin/osmosis
+    osmconvert_binary: munich/data/osm/osmconvert
 
   # Only interesting if you run the simulation
   java_memory: 12G
@@ -37,8 +45,9 @@ config:
   mode_choice: false
   matching_attributes: ["sex", "age_class", "has_license"]
 
-  # gtfs_path: gtfs
-  # osm_path: osm
+  if not run_synthesis:
+    gtfs_path: gtfs
+    osm_path: osm
 
 # Overrides for the Munich pipeline compared to the Île-de-France pipeline
 aliases:
