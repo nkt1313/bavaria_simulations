@@ -1,0 +1,13 @@
+.history
+.DS_Store
+data/*
+._*
+__pycache__/*
+*.pyc
+
+src/simulations/munich/output
+src/simulations/munich/cache
+src/simulations/munich/data
+src/simulations/augsburg/output
+src/simulations/augsburg/cache
+
