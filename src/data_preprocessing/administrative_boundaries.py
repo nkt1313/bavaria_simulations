@@ -1,3 +1,13 @@
+"""
+This module processes a GeoPackage file containing administrative boundaries of Germany.
+We then extract city-related features for a list of Bavarian cities. It converts the
+extracted features of each selected city into GeoPackage and GeoJSON formats, prints feature information,
+and plots the boundaries of the selected cities distinguishing between 'Stadt' (city) and 'Landkreis' (county).
+
+The file imported is a GeoPackage file named 'DE_VG250.gpkg' that contains multiple layers.
+We use the 'vg250_krs' layer which represents districts.
+"""
+
 import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
@@ -6,25 +16,36 @@ from shapely.geometry import shape
 import numpy as np
 
 # Define the path to the Downloaded GeoPackage file
-gpkg_path = r"C:\Users\nktba\OneDrive\Desktop\vg250-ew_12-31.utm32s.gpkg.ebenen\vg250-ew_ebenen_1231\DE_VG250.gpkg"
+gpkg_path = r"data/DE_VG250.gpkg" #relative path to the downloaded GeoPackage file
 gdf_districts = gpd.read_file(gpkg_path, layer="vg250_krs") # vg250_krs is the layer name for districts
-
-
-city_names = ['Augsburg', 'Nürnberg', 'Regensburg', 'Ingolstadt', 'Fürth', 'Würzburg', 'Erlangen', 'Bamberg', 'Landshut', 
-              'Bayreuth', 'Aschaffenburg', 'Kempten','Rosenheim','Schweinfurt']
-
-output_path = r"C:\Users\nktba\city_data" # define where you want to save the json and gpkg files
-plot_path = rf"C:\Users\nktba\city_data\{city_name}_boundaries.png" # define where you want to save the plots
+output_path = r"city_data"  # Directory to store JSON and GPKG files
 
 def gpkg_json_converter(city_name):
-        city_gdf = gdf_districts[gdf_districts["GEN"].str.contains(city_name, case=False, na=False)]
-        output_gpkg = rf"{output_path}\{city_name}.gpkg"
-        city_gdf.to_file(output_gpkg, driver="GPKG")
+    """
+    Extracts features for a city from the GeoDataFrame and
+    saves the results as both a GeoPackage and a GeoJSON file.
+    
+    Parameters:
+        city_name (str): The name of the city to process.
+    """
+    city_gdf = gdf_districts[gdf_districts["GEN"].str.contains(city_name, case=False, na=False)]
+    output_gpkg = rf"{output_path}\{city_name}.gpkg"
+    city_gdf.to_file(output_gpkg, driver="GPKG")
 
-        output_json = rf"{output_path}\{city_name}.json"
-        city_gdf.to_file(output_json, driver="GeoJSON")
+    output_json = rf"{output_path}\{city_name}.json"
+    city_gdf.to_file(output_json, driver="GeoJSON")
     
 def feature_extractor(city_name):
+    """
+    Extracts features corresponding to a given city from the GeoPackage file
+    using Fiona.
+    
+    Parameters:
+        city_name (str): The name of the city to process.
+    
+    Returns:
+        list: A list of Fiona feature dictionaries for the city.
+    """
     city_features = []
     with fiona.open(gpkg_path, layer="vg250_krs") as layer:
         for feature in layer:
@@ -33,6 +54,12 @@ def feature_extractor(city_name):
     return city_features
 
 def feature_printer(city_features):
+    """
+    Prints details for each feature of a city(ID, geometry type, coordinates, name, population, and area).
+    
+    Parameters:
+        city_features (list): List of feature dictionaries.
+    """
     for feature in city_features:
         print("Feature ID:", feature.id)
         geom = feature.geometry
@@ -42,9 +69,17 @@ def feature_printer(city_features):
         print("Name:", props.get('GEN'))
         print("Population (EWZ):", props.get('EWZ'))
         print("Area (KFL):", props.get('KFL'))
+        print('Type:', props.get('BEZ'))
         print("-" * 40)
 
-def plotter(city_features,city_name):
+def plotter_stadt_and_landkreis(city_features,city_name):
+    """
+    Plots the city boundaries distinguishing between 'Stadt' (city) and 'Landkreis' (county).
+    
+    Parameters:
+        city_features (list): List of feature for the city.
+        city_name (str): The name of the city to process.
+    """
     features = city_features
     geometries = [shape(feature["geometry"]) for feature in features] # Convert each Fiona geometry into a Shapely geometry
     properties = [feature["properties"] for feature in features]     # Extract each feature's properties into a list of dicts
@@ -82,7 +117,14 @@ def plotter(city_features,city_name):
         fig.savefig(plot_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to {plot_path}")
     
-def plotter_2(city_features,city_name):
+def plotter_kreisfreistadt(city_features,city_name):
+    """
+    Plots the city boundaries of cities with the type 'Kreisfreistadt'.
+    
+    Parameters:
+        city_features (list): List of feature for the city.
+        city_name (str): The name of the city to process.
+    """
     features = city_features
     geometries = [shape(feature["geometry"]) for feature in features]     # Convert Fiona features to Shapely geometries
     properties = [feature["properties"] for feature in features]     # Extract properties
@@ -138,16 +180,19 @@ def plotter_2(city_features,city_name):
     
 
 def main():
+    """
+    Main function to process the selected cities.
+    """
     for city_name in city_names:
-        plot_path = rf"C:\Users\nktba\city_data\{city_name}_boundaries.png"
+        plot_path = rf"{output_path}\{city_name}_boundaries.png" # define where you want to save the plots
         print(f"Processing {city_name}...")
         gpkg_json_converter(city_name)
         city_features = feature_extractor(city_name)
         feature_printer(city_features)
-        if city_name in ['Ingolstadt', 'Kempten','Neu-Ulm']:
-            plotter_2(city_features, city_name)
+        if city_name in ['Ingolstadt', 'Kempten','Neu-Ulm']: #give the list of the cities which are kreisfreistadt
+            plotter_kreisfreistadt(city_features, city_name)
         else:
-            plotter(city_features, city_name)
+            plotter_stadt_and_landkreis(city_features, city_name)
 
 if __name__ == '__main__':
     city_names = ['Augsburg', 'Nürnberg', 'Regensburg', 'Ingolstadt', 'Fürth', 'Würzburg', 'Erlangen', 'Bamberg', 'Landshut', 
