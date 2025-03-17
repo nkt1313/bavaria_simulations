@@ -7,13 +7,8 @@ run_synthesis: true
 data_path: ../../data/city_specific/munich/
 working_directory: ../../data/city_specific/munich/cache
 
-# This section defines which parts of the pipeline should be run
-# if run_synthesis:
 run:
   - synthesis.output
-# else: 
-#   run:
-#     - matsim.output
 
 # Here the configuraiton of the pipeline starts
 config:
@@ -45,7 +40,6 @@ config:
 
   gtfs_path: munich/data/gtfs # commented out for run simulation, not for synthesis
   osm_path: munich/data/osm # commented out for run simulation, not for synthesis
-
 
 # Overrides for the Munich pipeline compared to the Île-de-France pipeline
 aliases:
