@@ -1,0 +1,61 @@
+## Synthetic population pipeline for Munich
+## based on the synpp package
+
+run_synthesis: true
+
+# This is the path to a directory where the pipeline can store temporary data
+working_directory: ../../data/city_specific/regensburg/cache
+# before output_path was more down. 
+
+run:
+  - synthesis.output
+
+# Here the configuraiton of the pipeline starts
+config:
+  # Some general configuration
+  processes: 1
+
+  # Define whether to use ENTD or EGT as the household travel survey (HTS)
+  hts: entd
+
+  # Define sampling rate and random seed for the output population
+  sampling_rate: 0.01
+  random_seed: 1234
+ 
+  # Paths to the input data and where the output should be stored
+  data_path: regensburg/data
+  output_path: ../../data/city_specific/regensburg/output
+  output_prefix: regensburg_
+
+  # Population data paths
+  regensburg.population_path: "germany/vg250-ew_12-31.utm32s.gpkg.ebenen.zip"
+  regensburg.population_source: "vg250-ew_12-31.utm32s.gpkg.ebenen/vg250-ew_ebenen_1231/DE_VG250.gpkg"
+
+  osm_path_bavaria: osm/bayern-latest.osm.pbf 
+  osmosis_binary: /opt/homebrew/bin/osmosis
+  osmconvert_binary: regensburg/data/osm/osmconvert
+
+  # Defaults for Munich
+  home_location_sampling: weighted
+  mode_choice: false
+  matching_attributes: ["sex", "age_class", "has_license"]
+
+  gtfs_path: regensburg/data/gtfs 
+  osm_path: regensburg/data/osm 
+
+# Overrides for the Munich pipeline compared to the Île-de-France pipeline
+aliases:
+  data.census.filtered: regensburg.ipf.attributed
+  synthesis.population.income.selected: regensburg.income
+  synthesis.population.spatial.home.zones: regensburg.homes
+  synthesis.locations.home.locations: regensburg.locations.home
+  synthesis.locations.education: regensburg.locations.education
+  synthesis.locations.secondary: regensburg.locations.secondary
+  synthesis.locations.work: regensburg.locations.work
+  data.od.weighted: regensburg.gravity.model
+  data.spatial.iris: regensburg.data.spatial.iris
+  data.spatial.codes: regensburg.entd_codes
+  synthesis.population.spatial.primary.locations: regensburg.locations.synthesis.replacement
+  synthesis.population.enriched: regensburg.synthesis.population.enriched
+  matsim.simulation.prepare: regensburg.matsim.simulation.prepare
+

@@ -5,10 +5,14 @@ data/*
 __pycache__/*
 *.pyc
 
-src/simulations/munich/output
-src/simulations/munich/cache
-src/simulations/munich/data/*
-src/simulations/augsburg/output
-src/simulations/augsburg/cache
-src/simulations/augsburg/data/*
 src/simulations/data/*
+src/simulations/munich/data/*
+src/simulations/augsburg/data/*
+src/simulations/regensburg/data/*
+
+data/city_specific/augsburg/output/*
+data/city_specific/augsburg/cache/*
+data/city_specific/munich/output/*
+data/city_specific/munich/cache/*
+data/city_specific/regensburg/output/*
+data/city_specific/regensburg/cache/*
