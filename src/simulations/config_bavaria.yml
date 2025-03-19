@@ -4,8 +4,7 @@
 run_synthesis: true
 
 # This is the path to a directory where the pipeline can store temporary data
-data_path: ../../data/city_specific/munich/
-working_directory: ../../data/city_specific/munich/cache
+working_directory: munich/cache
 
 run:
   - synthesis.output
@@ -24,7 +23,7 @@ config:
  
   # Paths to the input data and where the output should be stored
   data_path: munich/data
-  output_path: ../../data/city_specific/munich/output
+  output_path: munich/output
   output_prefix: munich_
   osm_path_bavaria: osm/bayern-latest.osm.pbf 
   osmosis_binary: /opt/homebrew/bin/osmosis
