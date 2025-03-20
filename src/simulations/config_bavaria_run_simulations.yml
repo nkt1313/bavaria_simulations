@@ -1,0 +1,56 @@
+## Synthetic population pipeline for Munich
+## based on the synpp package
+
+# This is the path to a directory where the pipeline can store temporary data
+working_directory: munich/cache
+
+run:
+  - matsim.output
+
+# Here the configuraiton of the pipeline starts
+config:
+  # Some general configuration
+  processes: 1
+
+  # Define whether to use ENTD or EGT as the household travel survey (HTS)
+  hts: entd
+
+  # Define sampling rate and random seed for the output population
+  sampling_rate: 0.01
+  random_seed: 1234
+ 
+  # Paths to the input data and where the output should be stored
+  data_path: munich/data
+  output_path: munich/output
+  output_prefix: munich_
+  osm_path_bavaria: osm/bayern-latest.osm.pbf 
+  osmosis_binary: /opt/homebrew/bin/osmosis
+  osmconvert_binary: munich/data/osm/osmconvert
+
+  # Only interesting if you run the simulation
+  java_memory: 80G
+
+  # Defaults for Munich
+  home_location_sampling: weighted
+  mode_choice: false
+  matching_attributes: ["sex", "age_class", "has_license"]
+
+  gtfs_path: munich/data/gtfs # this is correct here. TRY WITHOUT path (just gtfs)
+  osm_path: munich/data/osm # this is correct here. TRY WITHOUT path (just osm)
+
+# Overrides for the Munich pipeline compared to the Île-de-France pipeline
+aliases:
+  data.census.filtered: munich.ipf.attributed
+  synthesis.population.income.selected: munich.income
+  synthesis.population.spatial.home.zones: munich.homes
+  synthesis.locations.home.locations: munich.locations.home
+  synthesis.locations.education: munich.locations.education
+  synthesis.locations.secondary: munich.locations.secondary
+  synthesis.locations.work: munich.locations.work
+  data.od.weighted: munich.gravity.model
+  data.spatial.iris: munich.data.spatial.iris
+  data.spatial.codes: munich.entd_codes
+  synthesis.population.spatial.primary.locations: munich.locations.synthesis.replacement
+  synthesis.population.enriched: munich.synthesis.population.enriched
+  matsim.simulation.prepare: munich.matsim.simulation.prepare
+
