@@ -18,7 +18,7 @@ config:
   hts: entd
 
   # Define sampling rate and random seed for the output population
-  sampling_rate: 0.0001
+  sampling_rate: 0.01
   random_seed: 1234
  
   # Paths to the input data and where the output should be stored
