@@ -14,6 +14,16 @@ src/simulations/munich/data/gtfs/*
 src/simulations/munich/data/mid/*
 src/simulations/munich/data/mvg/*
 src/simulations/munich/data/osm/*
-
 src/simulations/munich/output/*
 src/simulations/munich/cache/*
+
+src/simulations/bavaria/data/bavaria/*
+src/simulations/bavaria/data/census/*
+src/simulations/bavaria/data/entd_2008/*
+src/simulations/bavaria/data/germany/*
+src/simulations/bavaria/data/gtfs/*
+src/simulations/bavaria/data/mid/*
+src/simulations/bavaria/data/mvg/*
+src/simulations/bavaria/data/osm/*
+src/simulations/bavaria/output/*
+src/simulations/bavaria/cache/*
