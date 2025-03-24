@@ -11,3 +11,4 @@ src/simulations/munich/data
 src/simulations/augsburg/output
 src/simulations/augsburg/cache
 
+src/data_preprocessing/cache
