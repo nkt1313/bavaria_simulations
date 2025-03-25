@@ -29,3 +29,10 @@ src/synthetic_population_pipeline/bavaria/data/mvg/*
 src/synthetic_population_pipeline/bavaria/data/osm/*
 src/synthetic_population_pipeline/bavaria/output/*
 src/synthetic_population_pipeline/bavaria/cache/*
+
+# Simulation directories
+src/simulations/munich/output
+src/simulations/munich/cache
+src/simulations/munich/data
+src/simulations/augsburg/output
+src/simulations/augsburg/cache
