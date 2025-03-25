@@ -72,11 +72,11 @@ def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path):
         capacity = float(row.get('capacity', 0))
         
         if freespeed > 30:  # Major roads
-            plt.plot(x_coords, y_coords, 'r-', linewidth=0.8, alpha=0.6)
+            plt.plot(x_coords, y_coords, 'r-', linewidth=1, alpha=0.6)
         elif capacity > 1000:  # Medium roads
-            plt.plot(x_coords, y_coords, 'b-', linewidth=0.5, alpha=0.4)
+            plt.plot(x_coords, y_coords, 'g-', linewidth=1, alpha=0.4)
         else:  # Minor roads
-            plt.plot(x_coords, y_coords, 'gray', linewidth=0.2, alpha=0.2)
+            plt.plot(x_coords, y_coords, 'black', linewidth=1, alpha=0.2)
 
     plt.title(f"{city_name} Road Network")
     plt.axis('equal')

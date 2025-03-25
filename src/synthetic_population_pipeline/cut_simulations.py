@@ -43,8 +43,8 @@ def check_city_output(output_path: Path, city_prefix: str) -> bool:
 
 def get_largest_polygon(gpkg_path: Path) -> Path:
     """
-    Read the geopackage file and select the Landkreis polygon (the larger polygon that contains the city).
-    Returns the path to the temporary file containing the Landkreis polygon.
+    Read the geopackage file and select the city polygon (the smaller polygon).
+    Returns the path to the temporary file containing the city polygon.
     """
     # Read the geopackage
     gdf = gpd.read_file(gpkg_path)
@@ -52,7 +52,7 @@ def get_largest_polygon(gpkg_path: Path) -> Path:
     if len(gdf) < 2:
         raise ValueError(f"Expected at least 2 polygons (city and Landkreis) in {gpkg_path}, but found {len(gdf)}")
     
-    # Calculate areas and find the largest polygon (Landkreis)
+    # Calculate areas and find the polygons
     gdf['area'] = gdf.geometry.area
     landkreis = gdf.loc[gdf['area'].idxmax()]
     
@@ -74,14 +74,15 @@ def get_largest_polygon(gpkg_path: Path) -> Path:
         if not (5 <= city_ratio <= 30):
             print(f"WARNING: City area ratio ({city_ratio:.2f}%) is outside expected range (5-30%)")
     
-    # Create a new GeoDataFrame with just the Landkreis polygon
-    landkreis_gdf = gpd.GeoDataFrame([landkreis], geometry='geometry')
+    # Create a new GeoDataFrame with just the city polygon (smallest polygon)
+    city_gdf = gpd.GeoDataFrame([cities.iloc[0]], geometry='geometry')
     
     # Create temporary file with unique name
-    temp_gpkg = gpkg_path.parent / f"{gpkg_path.stem}_landkreis.gpkg"
-    landkreis_gdf.to_file(temp_gpkg, driver='GPKG')
+    temp_gpkg = gpkg_path.parent / f"{gpkg_path.stem}_city.gpkg"
+    city_gdf.to_file(temp_gpkg, driver='GPKG')
     
-    print(f"\nCreated temporary file with Landkreis polygon: {temp_gpkg}")
+    print(f"\nCreated temporary file with city polygon: {temp_gpkg}")
+    print(f"Using city polygon with area: {cities.iloc[0]['area']:,.2f} square meters")
     
     return temp_gpkg
 
@@ -96,7 +97,12 @@ def cut_network_for_city(city: str, base_dir: Path) -> None:
     original_extent_path = base_dir / "data" / "city_boundaries" / city / f"{city}.gpkg"
     city_prefix = f"{city}_"
 
-    # Process the extent file to get the Landkreis polygon
+    # Check if output already exists before doing any expensive operations
+    if check_city_output(output_path, city_prefix):
+        print(f"Skipping {city} - output already exists")
+        return
+
+    # Process the extent file to get the city polygon
     extent_path = get_largest_polygon(original_extent_path)
 
     # Ensure all paths are absolute
@@ -112,9 +118,9 @@ def cut_network_for_city(city: str, base_dir: Path) -> None:
     # Verify the extent file contains a valid polygon
     extent_gdf = gpd.read_file(extent_path)
     if len(extent_gdf) != 1:
-        raise ValueError(f"Extent file should contain exactly one polygon (Landkreis), but contains {len(extent_gdf)}")
+        raise ValueError(f"Extent file should contain exactly one polygon (city), but contains {len(extent_gdf)}")
     
-    print(f"\nUsing Landkreis polygon for cutting:")
+    print(f"\nUsing city polygon for cutting:")
     print(f"Area: {extent_gdf.geometry.area.iloc[0]:.2f} square meters")
     
     command = [
@@ -171,6 +177,12 @@ def main():
                 gdf = gpd.read_file(gpkg_file)
                 if len(gdf) < 2:
                     print(f"WARNING: {city_dir.name} GPKG file has less than 2 polygons. Skipping.")
+                    continue
+                    
+                # Check if output already exists before adding to processing list
+                output_path = base_dir / "data" / "simulation_data_per_city_new" / city_dir.name
+                if check_city_output(output_path, f"{city_dir.name}_"):
+                    print(f"Skipping {city_dir.name} - output already exists")
                     continue
                     
                 file_size = gpkg_file.stat().st_size
