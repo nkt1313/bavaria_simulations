@@ -50,10 +50,7 @@ data/
     ├── city1_network.png
     ├── city2_network.png
     └── ...
-    
-    # TODO add check whether network file already exists
 """
-
 
 def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path):
     """
@@ -132,7 +129,7 @@ def analyze_networks(base_dir: Path):
             output_dir.mkdir(exist_ok=True)
             
             # Create and save static plot
-            plot_file = output_dir / f"{city_name}_network.png"
+            plot_file = output_dir / f"{city_name}_city_network.png"
             plot_network(edges_df, city_name, plot_file)
             print(f"Network plot saved to: {plot_file}")
             
@@ -141,6 +138,6 @@ def analyze_networks(base_dir: Path):
             continue
 
 if __name__ == "__main__":
-    base_dir = Path("../../data/")
+    base_dir = Path("data/")
     analyze_networks(base_dir)
 
