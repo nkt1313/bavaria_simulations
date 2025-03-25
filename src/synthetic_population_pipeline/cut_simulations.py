@@ -190,8 +190,7 @@ def main():
                 print(f"Added {city_dir.name} with size {file_size}")
             except Exception as e:
                 print(f"Error processing {city_dir.name}: {e}")
-                continue
-        break    
+                continue    
     
     if not cities:
         print("ERROR: No valid cities found to process!")
