@@ -14,7 +14,7 @@ The script handles cities with multiple polygons differently and verifies the ex
 It processes cities sequentially, prioritizing smaller files first, and provides detailed logging for each step.
 '''
 
-# The cities that need extra treatment are Bayreuth and Nuernberg, whose city boundaries are not just one polygon but multiple ones.
+# These cities need extra treatment
 cities_with_multiple_polygons = ["bayreuth", "nuernberg"]
 cities_with_just_one_polygon = ["kempten", "neuulm", "ingolstadt"]
 
