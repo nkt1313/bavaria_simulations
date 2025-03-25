@@ -5,15 +5,34 @@ data/*
 __pycache__/*
 *.pyc
 
-src/simulations/data/*
-src/simulations/munich/data/bavaria/*
-src/simulations/munich/data/census/*
-src/simulations/munich/data/entd_2008/*
-src/simulations/munich/data/germany/*
-src/simulations/munich/data/gtfs/*
-src/simulations/munich/data/mid/*
-src/simulations/munich/data/mvg/*
-src/simulations/munich/data/osm/*
+# Munich data directories
+src/synthetic_population_pipeline/data/*
+src/synthetic_population_pipeline/munich/data/bavaria/*
+src/synthetic_population_pipeline/munich/data/census/*
+src/synthetic_population_pipeline/munich/data/entd_2008/*
+src/synthetic_population_pipeline/munich/data/germany/*
+src/synthetic_population_pipeline/munich/data/gtfs/*
+src/synthetic_population_pipeline/munich/data/mid/*
+src/synthetic_population_pipeline/munich/data/mvg/*
+src/synthetic_population_pipeline/munich/data/osm/*
+src/synthetic_population_pipeline/munich/output/*
+src/synthetic_population_pipeline/munich/cache/*
 
-src/simulations/munich/output/*
-src/simulations/munich/cache/*
+# Bavaria data directories
+src/synthetic_population_pipeline/bavaria/data/bavaria/*
+src/synthetic_population_pipeline/bavaria/data/census/*
+src/synthetic_population_pipeline/bavaria/data/entd_2008/*
+src/synthetic_population_pipeline/bavaria/data/germany/*
+src/synthetic_population_pipeline/bavaria/data/gtfs/*
+src/synthetic_population_pipeline/bavaria/data/mid/*
+src/synthetic_population_pipeline/bavaria/data/mvg/*
+src/synthetic_population_pipeline/bavaria/data/osm/*
+src/synthetic_population_pipeline/bavaria/output/*
+src/synthetic_population_pipeline/bavaria/cache/*
+
+# Simulation directories
+src/simulations/munich/output
+src/simulations/munich/cache
+src/simulations/munich/data
+src/simulations/augsburg/output
+src/simulations/augsburg/cache
