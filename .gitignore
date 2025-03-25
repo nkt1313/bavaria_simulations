@@ -5,6 +5,7 @@ data/*
 __pycache__/*
 *.pyc
 
+# Munich data directories
 src/synthetic_population_pipeline/data/*
 src/synthetic_population_pipeline/munich/data/bavaria/*
 src/synthetic_population_pipeline/munich/data/census/*
@@ -17,6 +18,7 @@ src/synthetic_population_pipeline/munich/data/osm/*
 src/synthetic_population_pipeline/munich/output/*
 src/synthetic_population_pipeline/munich/cache/*
 
+# Bavaria data directories
 src/synthetic_population_pipeline/bavaria/data/bavaria/*
 src/synthetic_population_pipeline/bavaria/data/census/*
 src/synthetic_population_pipeline/bavaria/data/entd_2008/*
