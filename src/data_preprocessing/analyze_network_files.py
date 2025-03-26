@@ -1,15 +1,3 @@
-
-import geopandas as gpd
-import networkx as nx
-import folium
-from pathlib import Path
-import xml.etree.ElementTree as ET
-import gzip
-import pandas as pd
-import matplotlib.pyplot as plt
-from shapely.geometry import LineString
-import network_io as nio
-
 """
 Network Analysis and Visualization Script
 
@@ -30,32 +18,66 @@ Key functionalities:
 Input:
 - Base directory containing city-specific simulation data
 - Network files named as '{city_name}_network.xml.gz'
+- Optional: Merged network files in 'merged_networks' directory
 
 Output:
 - Static PNG maps for each city's road network
 - Network statistics in console output
 
 Usage:
-python analyze_network_files.py
+1. Analyze regular networks:
+   a. Process a single city:
+      python analyze_network_files.py --city augsburg
+   b. Process specific cities:
+      python analyze_network_files.py --cities augsburg munich regensburg
+   c. Process all cities:
+      python analyze_network_files.py
+
+2. Analyze merged networks:
+   a. Process a single merged network:
+      python analyze_network_files.py --city augsburg --merged
+   b. Process specific merged networks:
+      python analyze_network_files.py --cities augsburg munich regensburg --merged
+   c. Process all merged networks:
+      python analyze_network_files.py --merged
 
 Directory structure expected:
 data/
 ├── simulation_data_per_city/
 │   ├── city1/
 │   │   └── city1_network.xml.gz
-│   ├── city2/
-│   │   └── city2_network.xml.gz
+│   └── ...
+├── merged_networks/
+│   ├── city1/
+│   │   └── city1_merged_network.xml.gz
 │   └── ...
 └── network_analysis/
     ├── city1_network.png
-    ├── city2_network.png
+    ├── city1_merged_network.png
     └── ...
-    
-    # TODO add check whether network file already exists
 """
 
+import geopandas as gpd
+import networkx as nx
+import folium
+from pathlib import Path
+import xml.etree.ElementTree as ET
+import gzip
+import pandas as pd
+import matplotlib.pyplot as plt
+from shapely.geometry import LineString
+import network_io as nio
+import argparse
+import logging
 
-def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path):
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path, is_merged: bool = False):
     """
     Create a static matplotlib plot of the network
     """
@@ -78,7 +100,8 @@ def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path):
         else:  # Minor roads
             plt.plot(x_coords, y_coords, 'black', linewidth=1, alpha=0.2)
 
-    plt.title(f"{city_name} Road Network")
+    title = f"{city_name} {'Merged ' if is_merged else ''}Road Network"
+    plt.title(title)
     plt.axis('equal')
     plt.grid(True, alpha=0.2)
     
@@ -95,52 +118,106 @@ def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path):
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-def analyze_networks(base_dir: Path):
+def analyze_networks(base_dir: Path, cities: list = None, is_merged: bool = False):
     """
-    Analyze and plot networks for all cities
+    Analyze and plot networks for specified cities
     """
-    simulations_dir = base_dir / "simulation_data_per_city_new/"
+    # Validate base directory
+    if not base_dir.exists():
+        raise FileNotFoundError(f"Base directory not found: {base_dir}")
     
-    if not Path(simulations_dir).exists():
-        raise FileNotFoundError(f"Simulations directory not found: {simulations_dir}")
+    # Set up data directory based on network type
+    if is_merged:
+        data_dir = base_dir / "data" / "merged_networks"
+        file_pattern = "{}_merged_network.xml.gz"
+    else:
+        data_dir = base_dir / "data" / "simulation_data_per_city_new"
+        file_pattern = "{}_network.xml.gz"
+    
+    if not data_dir.exists():
+        raise FileNotFoundError(f"Data directory not found: {data_dir}")
+    
+    # If no cities specified, process all cities in the directory
+    if not cities:
+        cities = [d.name for d in data_dir.iterdir() if d.is_dir()]
+        if not cities:
+            logger.warning("No cities found in directory")
+            return
+    
+    # Create output directory
+    output_dir = base_dir / "data" / "network_analysis"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if not output_dir.exists():
+        raise FileNotFoundError(f"Failed to create output directory: {output_dir}")
     
     # Process each city
-    for city_dir in Path(simulations_dir).iterdir():
-        if not city_dir.is_dir():
+    for city_name in cities:
+        city_dir = data_dir / city_name
+        if not city_dir.exists():
+            logger.warning(f"Directory not found for {city_name}")
             continue
             
-        city_name = city_dir.name
-        network_file = city_dir / f"{city_name}_network.xml.gz"
+        network_file = city_dir / file_pattern.format(city_name)
         
         if not network_file.exists():
-            print(f"Network file not found for {city_name}")
+            logger.warning(f"Network file not found for {city_name}: {network_file}")
             continue
             
         try:
-            print(f"\nProcessing {city_name}...")
+            logger.info(f"\nProcessing {city_name}...")
             
             # Parse network
             nodes = nio.parse_nodes(network_file)
             edges_df = nio.parse_edges(network_file, nodes)
             
-            print(f"Network statistics for {city_name}:")
-            print(f"Number of nodes: {len(nodes)}")
-            print(f"Number of links: {len(edges_df)}")
+            if len(nodes) == 0 or len(edges_df) == 0:
+                logger.warning(f"Empty network for {city_name}")
+                continue
             
-            # Create output directory
-            output_dir =  base_dir / "network_file_per_city"
-            output_dir.mkdir(exist_ok=True)
+            logger.info(f"Network statistics for {city_name}:")
+            logger.info(f"Number of nodes: {len(nodes)}")
+            logger.info(f"Number of links: {len(edges_df)}")
             
             # Create and save static plot
-            plot_file = output_dir / f"{city_name}_network.png"
-            plot_network(edges_df, city_name, plot_file)
-            print(f"Network plot saved to: {plot_file}")
+            plot_name = f"{city_name}_{'merged_' if is_merged else ''}network.png"
+            plot_file = output_dir / plot_name
+            plot_network(edges_df, city_name, plot_file, is_merged)
+            logger.info(f"Network plot saved to: {plot_file}")
             
         except Exception as e:
-            print(f"Error processing {city_name}: {e}")
+            logger.error(f"Error processing {city_name}: {e}")
             continue
 
+def main():
+    base_dir = Path("/hppfs/work/pn39mu/ge49wav3/mount_point_work_dir/bavaria-pipeline/")
+    
+    # Get command line arguments
+    parser = argparse.ArgumentParser(description='Analyze MATSim network files')
+    parser.add_argument('--city', type=str, help='Process a single city')
+    parser.add_argument('--cities', nargs='+', help='Process specific cities')
+    parser.add_argument('--merged', action='store_true', help='Analyze merged networks instead of regular networks')
+    args = parser.parse_args()
+    
+    # Validate arguments
+    if args.city and args.cities:
+        logger.error("Cannot specify both --city and --cities")
+        return
+    
+    # Determine which cities to process
+    if args.city:
+        cities = [args.city]
+    elif args.cities:
+        cities = args.cities
+    else:
+        cities = None  # Will process all cities
+    
+    try:
+        # Run analysis
+        analyze_networks(base_dir, cities, args.merged)
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        return
+
 if __name__ == "__main__":
-    base_dir = Path("../../data/")
-    analyze_networks(base_dir)
+    main()
 
