@@ -41,3 +41,4 @@ src/data_preprocessing/__pycache__/*
 src/data_preprocessing/cache/*
 
 simulation_output/*
+src/data_preprocessing/cache
