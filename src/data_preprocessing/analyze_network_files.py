@@ -118,15 +118,21 @@ def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path, is_m
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-def analyze_networks(base_dir: Path, cities: list = None, is_merged: bool = False):
+def analyze_networks(base_dir: Path, cities: list = None, is_merged: bool = False, is_for_landkreis: bool = False):
     """
-    Analyze and plot networks for specified cities
+    Analyze and plot networks for specified cities or Landkreise
+    
+    Args:
+        base_dir: Base directory for all paths
+        cities: List of cities to process
+        is_merged: Whether to analyze merged networks
+        is_for_landkreis: Whether to analyze Landkreis networks
     """
     # Validate base directory
     if not base_dir.exists():
         raise FileNotFoundError(f"Base directory not found: {base_dir}")
     
-    # Set up data directory based on network type
+    # Set up data directory based on network type and entity type
     if is_merged:
         data_dir = base_dir / "data" / "merged_networks"
         file_pattern = "{}_merged_network.xml.gz"
@@ -150,73 +156,62 @@ def analyze_networks(base_dir: Path, cities: list = None, is_merged: bool = Fals
     if not output_dir.exists():
         raise FileNotFoundError(f"Failed to create output directory: {output_dir}")
     
-    # Process each city
-    for city_name in cities:
-        city_dir = data_dir / city_name
-        if not city_dir.exists():
-            logger.warning(f"Directory not found for {city_name}")
+    # Process each city or Landkreis
+    for entity_name in cities:
+        entity_dir = data_dir / entity_name
+        if not entity_dir.exists():
+            logger.warning(f"Directory not found for {entity_name}")
             continue
             
-        network_file = city_dir / file_pattern.format(city_name)
+        network_file = entity_dir / file_pattern.format(entity_name)
         
         if not network_file.exists():
-            logger.warning(f"Network file not found for {city_name}: {network_file}")
+            logger.warning(f"Network file not found for {entity_name}: {network_file}")
             continue
             
         try:
-            logger.info(f"\nProcessing {city_name}...")
+            logger.info(f"\nProcessing {entity_name}...")
             
             # Parse network
             nodes = nio.parse_nodes(network_file)
             edges_df = nio.parse_edges(network_file, nodes)
             
             if len(nodes) == 0 or len(edges_df) == 0:
-                logger.warning(f"Empty network for {city_name}")
+                logger.warning(f"Empty network for {entity_name}")
                 continue
             
-            logger.info(f"Network statistics for {city_name}:")
-            logger.info(f"Number of nodes: {len(nodes)}")
-            logger.info(f"Number of links: {len(edges_df)}")
+            # Add additional analysis for Landkreis networks
+            if is_for_landkreis:
+                # Analyze city vs non-city edges
+                city_edges = edges_df[edges_df['scenario_edge'] == 'true']
+                non_city_edges = edges_df[edges_df['scenario_edge'] == 'false']
+                
+                logger.info(f"Network statistics for {entity_name}:")
+                logger.info(f"Total nodes: {len(nodes)}")
+                logger.info(f"Total links: {len(edges_df)}")
+                logger.info(f"City links: {len(city_edges)}")
+                logger.info(f"Non-city links: {len(non_city_edges)}")
             
             # Create and save static plot
-            plot_name = f"{city_name}_{'merged_' if is_merged else ''}network.png"
+            plot_name = f"{entity_name}_{'merged_' if is_merged else ''}network.png"
             plot_file = output_dir / plot_name
-            plot_network(edges_df, city_name, plot_file, is_merged)
+            plot_network(edges_df, entity_name, plot_file, is_merged)
             logger.info(f"Network plot saved to: {plot_file}")
             
         except Exception as e:
-            logger.error(f"Error processing {city_name}: {e}")
+            logger.error(f"Error processing {entity_name}: {e}")
             continue
 
 def main():
-    base_dir = Path("/hppfs/work/pn39mu/ge49wav3/mount_point_work_dir/bavaria-pipeline/")
+    base_dir = Path(__file__).parent.parent.parent
     
-    # Get command line arguments
-    parser = argparse.ArgumentParser(description='Analyze MATSim network files')
-    parser.add_argument('--city', type=str, help='Process a single city')
-    parser.add_argument('--cities', nargs='+', help='Process specific cities')
-    parser.add_argument('--merged', action='store_true', help='Analyze merged networks instead of regular networks')
-    args = parser.parse_args()
+    # Process Augsburg city
+    print("\nProcessing Augsburg city:")
+    cut_network_for_city("augsburg", base_dir, is_for_landkreis=False)
     
-    # Validate arguments
-    if args.city and args.cities:
-        logger.error("Cannot specify both --city and --cities")
-        return
-    
-    # Determine which cities to process
-    if args.city:
-        cities = [args.city]
-    elif args.cities:
-        cities = args.cities
-    else:
-        cities = None  # Will process all cities
-    
-    try:
-        # Run analysis
-        analyze_networks(base_dir, cities, args.merged)
-    except Exception as e:
-        logger.error(f"Analysis failed: {e}")
-        return
+    # Process Augsburg Landkreis
+    print("\nProcessing Augsburg Landkreis:")
+    cut_network_for_city("augsburg_landkreis", base_dir, is_for_landkreis=True)
 
 if __name__ == "__main__":
     main()
