@@ -87,19 +87,11 @@ def get_osm_roads(bounds, crs='EPSG:25832'):
         float(bounds[3])   # top/north
     )
     
-    # Custom filter to get relevant road types
-    custom_filter = (
-        '["highway"~"motorway|trunk|primary|secondary|tertiary|'
-        'residential|unclassified|motorway_link|trunk_link|'
-        'primary_link|secondary_link|tertiary_link"]'
-    )
-    
     try:
         # Download OSM data
         G = ox.graph_from_bbox(
             bbox,
-            network_type='drive',
-            custom_filter=custom_filter,
+            network_type='all',
             simplify=True,
             retain_all=False,
             truncate_by_edge=True
@@ -228,6 +220,9 @@ def spatial_join_networks(matsim_gdf, osm_gdf):
 
 
 def modify_districts_geodataframe(gdf):
+    '''
+    This function modifies the districts geodataframe to ensure it is in the correct CRS and has the correct zone_id
+    '''
     if (gdf.geometry.apply(lambda x: x.geom_type == "MultiPolygon")).any():
         gdf["geometry"] = gdf.geometry.apply(multipolygon_to_polygon)
     gdf["area"] = gdf.geometry.area
@@ -237,7 +232,7 @@ def modify_districts_geodataframe(gdf):
     # Ensure the data is in the correct CRS (EPSG:25832) **********VERY IMPORTANT**********
     if districts_gdf.crs != "EPSG:25832": #should match with the CRS of the Network Geodataframe
         districts_gdf = districts_gdf.to_crs(epsg=25832)
-    districts_gdf = districts_gdf[districts_gdf['zone_id']==1]
+    districts_gdf = districts_gdf[districts_gdf['zone_id']==1]#only keep the stadt region
     return districts_gdf
 
 
@@ -342,6 +337,9 @@ def generate_hexagon_grid_for_polygon(polygon, hexagon_size, projection='EPSG:25
 
 
 def generate_hexagon_grid_for_districts(districts_gdf, hexagon_size,gdf_edges_with_districts, projection='EPSG:25832'):
+    '''
+    This function generates a hexagon grid for the districts and assigns each edge to the hexagon(s) it falls into
+    '''
     # First, get the outer boundary of the entire region
     region_boundary = districts_gdf.union_all()
 
@@ -465,6 +463,7 @@ def check_road_type_distribution(gdf_edges_with_hex):
 
     # Optional: Check for any None values
     print("\nNumber of None values:", gdf_edges_with_hex['highway_consolidated'].isna().sum())
+    return gdf_edges_with_hex
 
 ########################################################################
 
@@ -494,7 +493,7 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, target_size=10000, s
     random.seed(seed)
     np.random.seed(seed)
     
-    # Get unique hexagon IDs and convert to list
+    # Get unique hexagon IDs containing edges and convert to list
     hexagon_ids = list(gdf_edges_with_hex['hexagon'].explode().dropna().unique())
     
     # Get unique road types (after consolidation)
@@ -620,7 +619,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             network_filename = f"network_{label}.xml.gz"
             network_path = os.path.join(folder_path, network_filename)
             
-            # Get edges in scenario hexagons
+            # Get edges in scenario hexagons (and the correct road type)
             scenario_mask = gdf_edges_with_hex['hexagon'].apply(
                 lambda x: any(h in subset for h in x) if isinstance(x, list) else False
             ) & (gdf_edges_with_hex['highway_consolidated'] == road_type)
@@ -690,9 +689,16 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
 
     
 
-def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, hexagon_grid_all, gdf_edges_with_hex,scenario_labels,road_type_subsets):
+def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, hexagon_grid_all, gdf_edges_with_hex, scenario_labels, road_type_subsets):
     # Load the network file
     matsim_network, nodes_subgraph, edges_subgraph = matsim_network_to_gdf(check_output_subgraph_path)
+    
+    # Match the highway_consolidated column from gdf_edges_with_hex to matsim_network
+    # Create a mapping dictionary from edge IDs to highway_consolidated values
+    highway_mapping = dict(zip(gdf_edges_with_hex['id'], gdf_edges_with_hex['highway_consolidated']))
+    
+    # Add highway_consolidated column to matsim_network using the mapping
+    matsim_network['highway_consolidated'] = matsim_network['id'].map(highway_mapping)
     
     fig, ax = plt.subplots(figsize=(15, 15))
     
@@ -726,7 +732,7 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
                      alpha=0.5,
                      label='Parent Network')
     
-    # Plot scenario edges
+    # Plot all scenario edges
     scenario_edges = matsim_network[matsim_network['id'].isin(gdf_edges_with_hex[scenario_mask]['id'])]
     scenario_edges.plot(ax=ax, 
                        color='red',
@@ -734,10 +740,20 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
                        alpha=0.8,
                        label='Scenario Edges')
     
+    # Plot scenario edges that match the road type from scenario label
+    road_type = key[0]  # Get the road type from the key
+    matching_edges = scenario_edges[scenario_edges['highway_consolidated'] == road_type]
+    matching_edges.plot(ax=ax,
+                       color='blue',
+                       linewidth=0.5,
+                       alpha=0.8,
+                       label=f'Road Type: {road_type}')
+    
     legend_elements = [
         Patch(facecolor='none', edgecolor='green', alpha=0.3, label='Hexagons'),
         Line2D([0], [0], color='gray', linewidth=0.5, alpha=0.5, label='Parent Network'),
-        Line2D([0], [0], color='red', linewidth=2, alpha=0.8, label='Scenario Edges')
+        Line2D([0], [0], color='red', linewidth=0.5, alpha=0.8, label='Scenario Edges'),
+        Line2D([0], [0], color='blue', linewidth=2, alpha=0.8, label=f'Road Type: {road_type}')
     ]
 
     ax.legend(handles=legend_elements)
@@ -788,15 +804,42 @@ def plot_hexagons_with_ids(gdf_hexagons, gdf_edges=None, title="Hexagon Grid wit
     
     plt.tight_layout()
 
-def cross_check_for_created_networks(check_output_subgraph_path,gdf_edges_with_hex,road_type_subsets,scenario_labels):
+def cross_check_for_created_networks(check_output_subgraph_path, gdf_edges_with_hex, road_type_subsets, scenario_labels):
+    """
+    Cross check the created network files to verify:
+    1. Which edges are in the selected hexagons
+    2. Which edges match the road type
+    3. How capacities have been modified
+    """
+    # Load the network file
+    matsim_network, nodes_subgraph, edges_subgraph = matsim_network_to_gdf(check_output_subgraph_path)
     
+    # Get scenario information
     scenario_label = os.path.basename(check_output_subgraph_path).replace('network_', '').split('.xml.gz')[0]
     key = next((k for k, v in scenario_labels.items() if v == scenario_label), None)
     hex_ids = road_type_subsets[key[0]][key[1]]
-    mask = gdf_edges_with_hex['hexagon'].apply(lambda x: any(hex_id in x for hex_id in hex_ids) if isinstance(x, list) else False)
+    
+    # Get edges in selected hexagons
+    mask = gdf_edges_with_hex['hexagon'].apply(
+        lambda x: any(hex_id in x for hex_id in hex_ids) if isinstance(x, list) else False
+    )
     edges_in_selected_hexagon = gdf_edges_with_hex[mask]
-    edges_in_selected_hexagon_and_road_type = edges_in_selected_hexagon[edges_in_selected_hexagon['highway_consolidated'] == key[0]]
-    return edges_in_selected_hexagon_and_road_type,edges_in_selected_hexagon
+    
+    # Get edges that match both hexagon and road type
+    edges_in_selected_hexagon_and_road_type = edges_in_selected_hexagon[
+        edges_in_selected_hexagon['highway_consolidated'] == key[0]
+    ]
+    
+    # Create a comparison DataFrame for the capacity changes
+    comparison_df = pd.DataFrame({
+        'edge_id': edges_in_selected_hexagon['id'],
+        'road_type': edges_in_selected_hexagon['highway_consolidated'],
+        'original_capacity': edges_in_selected_hexagon['capacity'],
+        'modified_capacity': matsim_network[matsim_network['id'].isin(edges_in_selected_hexagon['id'])]['capacity'],
+        'capacity_reduced': edges_in_selected_hexagon['highway_consolidated'] == key[0]
+    })
+    
+    return edges_in_selected_hexagon_and_road_type, edges_in_selected_hexagon, comparison_df
 
 def main():
     # Load MATSim network
@@ -820,7 +863,7 @@ def main():
     #plot the grid and the edges
     plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all, enriched_network,districts_gdf)
     #check the road type distribution
-    check_road_type_distribution(gdf_edges_with_hex)
+    gdf_with_grouped_road_types = check_road_type_distribution(gdf_edges_with_hex)
     #generate the road type specific subsets
     road_type_subsets = generate_road_type_specific_subsets(gdf_edges_with_hex,seed=13)
     #generate the scenario labels
@@ -828,10 +871,16 @@ def main():
     #create the scenario networks
     create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, city_name="Augsburg", output_base_path=output_base_path, nodes_dict=nodes_dict)
     #plot the check for the created networks
-    plot_check_for_created_networks(check_output_subgraph_path,districts_gdf,hexagon_grid_all,gdf_edges_with_hex,scenario_labels,road_type_subsets)
+    matsim_network = plot_check_for_created_networks(check_output_subgraph_path,districts_gdf,hexagon_grid_all,gdf_edges_with_hex,scenario_labels,road_type_subsets)
     #plot the hexagons with ids
     plot_hexagons_with_ids(hexagon_grid_all, title="Hexagon Grid with IDs")
     #cross check the created networks
-    edges_in_selected_hexagon_and_road_type,edges_in_selected_hexagon = cross_check_for_created_networks(check_output_subgraph_path,gdf_edges_with_hex,road_type_subsets,scenario_labels)
-    edges_in_selected_hexagon
-    edges_in_selected_hexagon_and_road_type
+    edges_with_road_type, edges_in_hexagons, capacity_changes = cross_check_for_created_networks(
+    check_output_subgraph_path,
+    gdf_edges_with_hex,
+    road_type_subsets,
+    scenario_labels
+    )   
+    edges_with_road_type
+    edges_in_hexagons
+    capacity_changes
