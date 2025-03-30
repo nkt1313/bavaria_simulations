@@ -29,13 +29,18 @@ import os
 import random
 import gzip
 
-administrative_boundary_json_path = r"C:\Users\nktba\city_data\Augsburg.json"
-matsim_network_file_path = r"C:\Users\nktba\city_data\augsburg_network.xml.gz"
-hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
-output_base_path = r"C:\Users\nktba\city_data\network_check"
-capacity_tuning_factor = 0.5 
+os.chdir(r"C:\Users\nktba\bavaria_simulations") # Set working directory
+base_dir = os.getcwd()
+administrative_boundary_json_path = os.path.join(base_dir, "data", "output", "boundary_files", "Augsburg.json")
+matsim_network_file_path = os.path.join(base_dir, "data", "output", "simulation_data_per_city","augsburg", "augsburg_network.xml.gz")
+output_base_path = os.path.join(base_dir, "data", "output", "network_files")
 
-check_output_subgraph_path = r"C:\Users\nktba\city_data\network_check\Augsburg\networks\networks_0\network_residential_n4_s4.xml.gz"
+#Define variables
+hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
+capacity_tuning_factor = 0.5 #This is the factor by which the capacity of the links is reduced
+
+#Define the path to the check output subgraph
+check_output_subgraph_path = os.path.join(base_dir, "data", "output", "network_files", "Augsburg", "networks", "networks_0", "network_residential_n7_s1.xml.gz")
 
 def matsim_network_to_gdf(network_file):
     """
@@ -465,7 +470,7 @@ def check_road_type_distribution(gdf_edges_with_hex):
 
 ###################################################################
 
-def generate_road_type_specific_subsets(gdf_edges_with_hex, target_size=10000, std_dev=3):
+def generate_road_type_specific_subsets(gdf_edges_with_hex, target_size=10000, std_dev=3, seed=13):
     """
     Generate unique subsets of hexagon IDs for each road type, where the total number of subsets
     is target_size, distributed evenly across road types.
@@ -478,11 +483,17 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, target_size=10000, s
         Total number of subsets to generate (will be divided among road types)
     std_dev : float
         Standard deviation for the normal distribution of subset sizes
+    seed : int
+        Random Seed for reproducibility
     
     Returns:
     --------
     dict : Dictionary mapping each road type to its list of hexagon ID subsets
     """
+    # Set the seed for reproducibility
+    random.seed(seed)
+    np.random.seed(seed)
+    
     # Get unique hexagon IDs and convert to list
     hexagon_ids = list(gdf_edges_with_hex['hexagon'].explode().dropna().unique())
     
@@ -524,6 +535,7 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, target_size=10000, s
     print(f"Actual mean subset length: {overall_mean:.2f}")
     print(f"Number of road types: {len(road_types)}")
     print(f"Subsets per road type: {subsets_per_type}")
+    print(f"Seed used: {seed}")
     
     return road_type_subsets
 
@@ -810,7 +822,7 @@ def main():
     #check the road type distribution
     check_road_type_distribution(gdf_edges_with_hex)
     #generate the road type specific subsets
-    road_type_subsets = generate_road_type_specific_subsets(gdf_edges_with_hex)
+    road_type_subsets = generate_road_type_specific_subsets(gdf_edges_with_hex,seed=13)
     #generate the scenario labels
     scenario_labels = generate_scenario_labels(road_type_subsets)
     #create the scenario networks
@@ -823,6 +835,3 @@ def main():
     edges_in_selected_hexagon_and_road_type,edges_in_selected_hexagon = cross_check_for_created_networks(check_output_subgraph_path,gdf_edges_with_hex,road_type_subsets,scenario_labels)
     edges_in_selected_hexagon
     edges_in_selected_hexagon_and_road_type
-    
-    
-    
