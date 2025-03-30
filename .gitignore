@@ -43,5 +43,5 @@ src/data_preprocessing/cache/*
 simulation_output/*
 
 # Ignore top-level input and output folders
-/input/
-/output/
+/data/
+/cache/
