@@ -7,7 +7,7 @@ and plots the boundaries of the selected cities distinguishing between 'Stadt' (
 The file imported is a GeoPackage file named 'DE_VG250.gpkg' that contains multiple layers.
 We use the 'vg250_krs' layer which represents districts.
 """
-
+import os
 import geopandas as gpd
 import fiona
 import matplotlib.pyplot as plt
@@ -16,9 +16,10 @@ from shapely.geometry import shape
 import numpy as np
 
 # Define the path to the Downloaded GeoPackage file
-gpkg_path = r"data/DE_VG250.gpkg" #relative path to the downloaded GeoPackage file
+os.chdir(r"C:\Users\nktba\bavaria_simulations") # Set working directory
+gpkg_path = os.path.join("data", "DE_VG250.gpkg") # Define relative path to the GeoPackage
 gdf_districts = gpd.read_file(gpkg_path, layer="vg250_krs") # vg250_krs is the layer name for districts
-output_path = r"city_data"  # Directory to store JSON and GPKG files
+output_path = os.path.join("data", "output", "boundary_files")  # Directory to store JSON and GPKG files
 
 def gpkg_json_converter(city_name):
     """
@@ -72,7 +73,7 @@ def feature_printer(city_features):
         print('Type:', props.get('BEZ'))
         print("-" * 40)
 
-def plotter_stadt_and_landkreis(city_features,city_name):
+def plotter_stadt_and_landkreis(city_features,city_name,plot_path):
     """
     Plots the city boundaries distinguishing between 'Stadt' (city) and 'Landkreis' (county).
     
@@ -117,7 +118,7 @@ def plotter_stadt_and_landkreis(city_features,city_name):
         fig.savefig(plot_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to {plot_path}")
     
-def plotter_kreisfreistadt(city_features,city_name):
+def plotter_kreisfreistadt(city_features,city_name,plot_path):
     """
     Plots the city boundaries of cities with the type 'Kreisfreistadt'.
     
@@ -184,15 +185,15 @@ def main():
     Main function to process the selected cities.
     """
     for city_name in city_names:
-        plot_path = rf"{output_path}\{city_name}_boundaries.png" # define where you want to save the plots
+        plot_path = os.path.join(output_path, f"{city_name}_boundaries.png")
         print(f"Processing {city_name}...")
         gpkg_json_converter(city_name)
         city_features = feature_extractor(city_name)
         feature_printer(city_features)
         if city_name in ['Ingolstadt', 'Kempten','Neu-Ulm']: #give the list of the cities which are kreisfreistadt
-            plotter_kreisfreistadt(city_features, city_name)
+            plotter_kreisfreistadt(city_features, city_name, plot_path)
         else:
-            plotter_stadt_and_landkreis(city_features, city_name)
+            plotter_stadt_and_landkreis(city_features, city_name, plot_path)
 
 if __name__ == '__main__':
     city_names = ['Augsburg', 'Nürnberg', 'Regensburg', 'Ingolstadt', 'Fürth', 'Würzburg', 'Erlangen', 'Bamberg', 'Landshut', 
