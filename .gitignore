@@ -45,3 +45,4 @@ simulation_output/*
 # Ignore top-level input and output folders
 /data/
 /cache/
+hs_err_pid*.log
