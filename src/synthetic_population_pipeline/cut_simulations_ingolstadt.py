@@ -53,50 +53,6 @@ def check_city_output(output_path: Path, city_prefix: str) -> bool:
     return all_files_exist
 
 
-def get_largest_polygon(gpkg_path: Path) -> Path:
-    """
-    Read the geopackage file and select the city polygon (the smaller polygon).
-    Returns the path to the temporary file containing the city polygon.
-    """
-    # Read the geopackage
-    gdf = gpd.read_file(gpkg_path)
-    
-    if len(gdf) < 2:
-        raise ValueError(f"Expected at least 2 polygons (city and Landkreis) in {gpkg_path}, but found {len(gdf)}")
-    
-    # Calculate areas and find the polygons
-    gdf['area'] = gdf.geometry.area
-    landkreis = gdf.loc[gdf['area'].idxmax()]
-    
-    # Get all other polygons (cities)
-    cities = gdf[gdf['area'] != landkreis['area']]
-    
-    print(f"\nProcessing {gpkg_path.name}:")
-    print(f"Landkreis area: {landkreis['area']:,.2f} square meters")
-    
-    # Verify that the Landkreis contains all cities and check area ratios
-    for _, city in cities.iterrows():
-        city_ratio = (city['area'] / landkreis['area']) * 100
-        print(f"\nCity information:")
-        print(f"  Area: {city['area']:,.2f} square meters")
-        print(f"  Ratio to Landkreis: {city_ratio:.2f}%")
-        print(f"  Contained within Landkreis: {landkreis.geometry.contains(city.geometry)}")
-        
-        # Verify the ratio is reasonable (city should be between 5% and 30% of Landkreis)
-        if not (5 <= city_ratio <= 30):
-            print(f"WARNING: City area ratio ({city_ratio:.2f}%) is outside expected range (5-30%)")
-    
-    # Create a new GeoDataFrame with just the city polygon (smallest polygon)
-    city_gdf = gpd.GeoDataFrame([cities.iloc[0]], geometry='geometry')
-    
-    # Create temporary file with unique name
-    temp_gpkg = gpkg_path.parent / f"{gpkg_path.stem}_city.gpkg"
-    city_gdf.to_file(temp_gpkg, driver='GPKG')
-    
-    print(f"\nCreated temporary file with city polygon: {temp_gpkg}")
-    print(f"Using city polygon with area: {cities.iloc[0]['area']:,.2f} square meters")
-    
-    return temp_gpkg
 
 def get_largest_polygon_for_multiple_polygons(gpkg_path: Path) -> Path:
     """
@@ -230,10 +186,10 @@ def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = Fal
             temp_extent_path = get_largest_polygon_for_multiple_polygons(original_extent_path)
 
         elif city in cities_with_just_one_polygon:
-            temp_extent_path = get_polygon(original_extent_path, is_for_landkreis)
+            temp_extent_path = get_full_extent(original_extent_path)
 
         else:
-            temp_extent_path = get_largest_polygon(original_extent_path)
+            pass
             
         # Ensure all paths are absolute
         jar_path = jar_path.resolve()
