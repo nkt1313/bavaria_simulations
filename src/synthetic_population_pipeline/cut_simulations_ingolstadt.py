@@ -185,42 +185,27 @@ def get_full_extent(gpkg_path):
 
 def get_polygon(gpkg_path: Path, is_for_landkreis: bool = False) -> Path:
     """
-    Read the geopackage file for cities that have only one polygon (where the Landkreis is the city).
-    Returns the path to the temporary file containing the polygon.
+    Accepts a .gpkg that may contain a single MultiPolygon representing both Stadt + Landkreis.
+    Returns a temporary GPKG for use in network cutting.
     """
-    # Read the geopackage
     gdf = gpd.read_file(gpkg_path)
-    
+
     if len(gdf) != 1:
-        raise ValueError(f"Expected only 1 polygon in {gpkg_path}, but found {len(gdf)}")
-    
-    # Calculate areas and find the polygons
-    gdf['area'] = gdf.geometry.area
-    landkreis = gdf.loc[gdf['area'].idxmax()]
-    
-    # Get all other polygons (cities)
-    cities = gdf[gdf['area'] != landkreis['area']]
-    
+        raise ValueError(f"Expected exactly 1 feature in {gpkg_path}, but found {len(gdf)}")
+
+    geom = gdf.iloc[0].geometry
     print(f"\nProcessing {gpkg_path.name}:")
-    print(f"Landkreis area: {landkreis['area']:,.2f} square meters")
-    
-    if is_for_landkreis:
-        # For Landkreis, we want both the Landkreis and its cities
-        selected_polygons = [landkreis] + list(cities.geometry)
-        print(f"Using Landkreis and {len(cities)} cities")
-    else:
-        # For city, we only want the city polygon
-        selected_polygons = [cities.iloc[0].geometry]
-        print(f"Using city polygon with area: {cities.iloc[0]['area']:,.2f} square meters")
-    
-    # Create a new GeoDataFrame with the selected polygon(s)
-    polygon_gdf = gpd.GeoDataFrame(geometry=selected_polygons)
-    
-    # Create temporary file with unique name
-    temp_gpkg = gpkg_path.parent / f"{gpkg_path.stem}_{'landkreis' if is_for_landkreis else 'city'}.gpkg"
-    polygon_gdf.to_file(temp_gpkg, driver='GPKG')
-    
+    print(f"Geometry type: {geom.geom_type}, Area: {geom.area:,.2f} square meters")
+
+    # Create a new GeoDataFrame with the full MultiPolygon
+    polygon_gdf = gpd.GeoDataFrame(geometry=[geom], crs=gdf.crs)
+
+    # Save to temporary file
+    temp_gpkg = gpkg_path.parent / f"{gpkg_path.stem}_full.gpkg"
+    polygon_gdf.to_file(temp_gpkg, driver="GPKG")
+
     return temp_gpkg
+
 
 def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = False) -> None:
     """
