@@ -127,16 +127,15 @@ def get_largest_polygon_for_multiple_polygons(gpkg_path: Path) -> Path:
     
     return temp_gpkg
 
-def get_full_extent(gpkg_path):
-    """
-    Return the full extent (all geometries) from the input GPKG.
-    """
+def get_full_extent(gpkg_path: Path) -> Path:
     gdf = gpd.read_file(gpkg_path)
-    full_union = gdf.unary_union  # Merge all polygons
+    full_union = gdf.unary_union
     full_gdf = gpd.GeoDataFrame(geometry=[full_union], crs=gdf.crs)
-    
-    temp_file = gpkg_path.replace(".gpkg", "_combined_temp.gpkg")
+
+    # Properly create the output file name using Path
+    temp_file = gpkg_path.parent / f"{gpkg_path.stem}_combined_temp.gpkg"
     full_gdf.to_file(temp_file, driver="GPKG")
+    return temp_file
     return temp_file
 
 def get_polygon(gpkg_path: Path, is_for_landkreis: bool = False) -> Path:
