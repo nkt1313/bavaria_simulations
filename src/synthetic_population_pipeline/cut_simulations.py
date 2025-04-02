@@ -17,6 +17,7 @@ It processes cities sequentially, prioritizing smaller files first, and provides
 # These cities need extra treatment
 cities_with_multiple_polygons = ["bayreuth", "nuernberg"]
 cities_with_just_one_polygon = ["kempten", "neuulm", "ingolstadt"]
+cities_with_combined_stadt_and_landkreis = ["augsburg"]
 
 def check_city_output(output_path: Path, city_prefix: str) -> bool:
     """
@@ -170,6 +171,18 @@ def get_largest_polygon_for_multiple_polygons(gpkg_path: Path) -> Path:
     
     return temp_gpkg
 
+def get_full_extent(gpkg_path):
+    """
+    Return the full extent (all geometries) from the input GPKG.
+    """
+    gdf = gpd.read_file(gpkg_path)
+    full_union = gdf.unary_union  # Merge all polygons
+    full_gdf = gpd.GeoDataFrame(geometry=[full_union], crs=gdf.crs)
+    
+    temp_file = gpkg_path.replace(".gpkg", "_combined_temp.gpkg")
+    full_gdf.to_file(temp_file, driver="GPKG")
+    return temp_file
+
 def get_polygon(gpkg_path: Path, is_for_landkreis: bool = False) -> Path:
     """
     Read the geopackage file for cities that have only one polygon (where the Landkreis is the city).
@@ -209,6 +222,18 @@ def get_polygon(gpkg_path: Path, is_for_landkreis: bool = False) -> Path:
     
     return temp_gpkg
 
+def get_full_extent(gpkg_path):
+    """
+    Return a temp GPKG with all polygons merged (Stadt + Landkreis).
+    """
+    gdf = gpd.read_file(gpkg_path)
+    full_union = gdf.unary_union
+    full_gdf = gpd.GeoDataFrame(geometry=[full_union], crs=gdf.crs)
+
+    temp_file = gpkg_path.with_name(gpkg_path.stem + "_full_extent_temp.gpkg")
+    full_gdf.to_file(temp_file, driver="GPKG")
+    return temp_file
+
 def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = False) -> None:
     """
     Cut the network for a single city using RunScenarioCutter
@@ -224,10 +249,16 @@ def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = Fal
     temp_extent_path = None
 
     try:
-        if city in cities_with_multiple_polygons:
+        if city in cities_with_combined_stadt_and_landkreis:
+            print(f"Using full extent (Stadt + Landkreis) for {city}")
+            temp_extent_path = get_full_extent(original_extent_path)
+
+        elif city in cities_with_multiple_polygons:
             temp_extent_path = get_largest_polygon_for_multiple_polygons(original_extent_path)
+
         elif city in cities_with_just_one_polygon:
             temp_extent_path = get_polygon(original_extent_path, is_for_landkreis)
+
         else:
             temp_extent_path = get_largest_polygon(original_extent_path)
             
@@ -296,12 +327,15 @@ def main():
     base_dir = Path(__file__).parent.parent.parent
     
     # Process Augsburg city
-    print("\nProcessing Augsburg city:")
-    cut_network_for_city("augsburg", base_dir, is_for_landkreis=False)
+    #print("\nProcessing Augsburg city:")
+    #cut_network_for_city("augsburg", base_dir, is_for_landkreis=False)
     
     # Process Augsburg Landkreis
-    print("\nProcessing Augsburg Landkreis:")
-    cut_network_for_city("augsburg_landkreis", base_dir, is_for_landkreis=True)
+    #print("\nProcessing Augsburg Landkreis:")
+    #cut_network_for_city("augsburg_landkreis", base_dir, is_for_landkreis=True)
+    
+    print("\nProcessing entire Augsburg city:")
+    cut_network_for_city("augsburg", base_dir, is_for_landkreis=True)
 
 if __name__ == "__main__":
     main()
