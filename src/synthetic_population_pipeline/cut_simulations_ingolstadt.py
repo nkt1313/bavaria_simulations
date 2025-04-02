@@ -191,8 +191,8 @@ def get_polygon(gpkg_path: Path, is_for_landkreis: bool = False) -> Path:
     # Read the geopackage
     gdf = gpd.read_file(gpkg_path)
     
-    if len(gdf) != 2:
-        raise ValueError(f"Expected at least 2 polygons in {gpkg_path}, but found {len(gdf)}")
+    if len(gdf) != 1:
+        raise ValueError(f"Expected only 1 polygon in {gpkg_path}, but found {len(gdf)}")
     
     # Calculate areas and find the polygons
     gdf['area'] = gdf.geometry.area
