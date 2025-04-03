@@ -63,7 +63,9 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from pathlib import Path
 import logging
-from network_io import parse_nodes, parse_edges
+import gzip
+import xml.etree.ElementTree as ET
+from shapely.geometry import Point, LineString
 
 # Set up logging
 logging.basicConfig(
@@ -72,19 +74,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def matsim_network_to_gdf(network_path: Path) -> tuple:
+def parse_network(network_path: Path) -> tuple:
     """
-    Convert MATSim network XML file to GeoDataFrame.
-    Returns tuple of (nodes_dict, df_edges, gdf)
+    Parse MATSim network XML file directly.
+    Returns tuple of (nodes_df, links_gdf)
     """
-    # Parse nodes and edges using network_io
-    nodes_dict = parse_nodes(network_path)
-    df_edges = parse_edges(network_path)
+    # Parse the XML
+    with gzip.open(network_path, 'rb') as f:
+        tree = ET.parse(f)
+    root = tree.getroot()
+
+    # Extract nodes
+    nodes = []
+    for node in root.find('nodes'):
+        nodes.append({
+            'id': node.attrib['id'],
+            'x': float(node.attrib['x']),
+            'y': float(node.attrib['y'])
+        })
+
+    nodes_df = pd.DataFrame(nodes)
+    nodes_gdf = gpd.GeoDataFrame(nodes_df, geometry=gpd.points_from_xy(nodes_df.x, nodes_df.y), crs="EPSG:25832")
+
+    # Extract links
+    links = []
+    for link in root.find('links'):
+        from_id = link.attrib['from']
+        to_id = link.attrib['to']
+        
+        from_node = nodes_df[nodes_df['id'] == from_id].iloc[0]
+        to_node = nodes_df[nodes_df['id'] == to_id].iloc[0]
+        
+        links.append({
+            'id': link.attrib['id'],
+            'geometry': LineString([(from_node['x'], from_node['y']), (to_node['x'], to_node['y'])])
+        })
+
+    links_gdf = gpd.GeoDataFrame(links, geometry='geometry', crs="EPSG:25832")
     
-    # Create GeoDataFrame from edges
-    gdf = gpd.GeoDataFrame(df_edges, geometry='geometry', crs='EPSG:25832')
-    
-    return nodes_dict, df_edges, gdf
+    return nodes_df, links_gdf
 
 def analyze_network_files():
     """
@@ -113,51 +141,38 @@ def analyze_network_files():
             
         try:
             # Parse the network file
-            nodes_dict, df_edges, gdf = matsim_network_to_gdf(network_path)
+            nodes_df, links_gdf = parse_network(network_path)
             
             # Calculate statistics
             stats = {
                 'city': city,
-                'num_nodes': len(nodes_dict),
-                'num_links': len(df_edges),
-                'total_length_km': df_edges['length'].sum() / 1000,  # Convert to km
-                'avg_link_length_m': df_edges['length'].mean(),
-                'max_link_length_m': df_edges['length'].max(),
-                'min_link_length_m': df_edges['length'].min(),
-                'total_capacity': df_edges['capacity'].sum(),
-                'avg_capacity': df_edges['capacity'].mean(),
-                'num_freespeed_links': len(df_edges[df_edges['freespeed'] > 0]),
-                'avg_freespeed': df_edges['freespeed'].mean(),
-                'num_lanes': df_edges['lanes'].sum(),
-                'avg_lanes': df_edges['lanes'].mean()
+                'num_nodes': len(nodes_df),
+                'num_links': len(links_gdf),
+                'total_length_km': links_gdf.geometry.length.sum() / 1000,  # Convert to km
+                'avg_link_length_m': links_gdf.geometry.length.mean(),
+                'max_link_length_m': links_gdf.geometry.length.max(),
+                'min_link_length_m': links_gdf.geometry.length.min()
             }
-            
-            # Add road type distribution if available
-            if 'highway' in df_edges.columns:
-                road_types = df_edges['highway'].value_counts()
-                for road_type, count in road_types.items():
-                    stats[f'num_{road_type}'] = count
-                    stats[f'pct_{road_type}'] = (count / len(df_edges)) * 100
             
             results.append(stats)
             
-            # Create and save plot for this city
-            if 'highway' in df_edges.columns:
-                # Create figure
-                fig, ax = plt.subplots(figsize=(15, 10))
-                
-                # Plot network in gray
-                gdf.plot(ax=ax, color='gray', linewidth=0.5)
-                
-                ax.set_title(f'Road Network - {city.capitalize()}')
-                ax.axis('off')
-                
-                # Adjust layout and save
-                plt.tight_layout()
-                plot_path = city_dir / f"{city}_network_analysis.png"
-                plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-                plt.close()
-                print(f"Saved plot to: {plot_path}")
+            # Create and save plot
+            fig, ax = plt.subplots(figsize=(15, 15))
+            links_gdf.plot(ax=ax, linewidth=0.5, color='gray')
+            nodes_df.plot(ax=ax, markersize=1, color='red')
+            ax.set_title(f"Network - {city.capitalize()}")
+            ax.axis("equal")
+            
+            # Save plot
+            plot_path = city_dir / f"{city}_network_analysis.png"
+            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"Saved plot to: {plot_path}")
+            
+            # Save individual city DataFrame
+            city_df = pd.DataFrame([stats])
+            city_df.to_csv(city_dir / f"{city}_network_stats.csv", index=False)
+            print(f"Saved city statistics to: {city_dir / f'{city}_network_stats.csv'}")
             
             print(f"Successfully analyzed {city}")
             
