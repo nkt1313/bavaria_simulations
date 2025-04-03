@@ -197,7 +197,7 @@ def main():
 
 if __name__ == '__main__':
     city_names = ['Augsburg', 'Nürnberg', 'Regensburg', 'Ingolstadt', 'Fürth', 'Würzburg', 'Erlangen', 'Bamberg', 'Landshut', 
-              'Bayreuth', 'Aschaffenburg', 'Kempten','Rosenheim','Schweinfurt'] #insert the Bavarian city names according to requirement
+              'Bayreuth', 'Aschaffenburg', 'Kempten','Rosenheim','Schweinfurt','München'] #insert the Bavarian city names according to requirement
     main()
 
 
