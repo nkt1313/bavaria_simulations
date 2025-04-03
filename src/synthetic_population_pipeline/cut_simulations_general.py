@@ -8,19 +8,19 @@ import geopandas as gpd
 import time
 
 '''
-This script processes city-specific simulation data by cutting the network for each city using the RunScenarioCutter.
-It identifies cities to process by reading city boundary files and ensures that the output for each city is generated correctly.
-The script handles cities with multiple and just one polygons differently and verifies the existence and validity of required output files.
-It processes cities sequentially, prioritizing smaller files first, and provides detailed logging for each step.
+1. This script processes city-specific simulation data by cutting the network for each city using the RunScenarioCutter.
+2. The script supports various city types — Landkreis, Stadt, and combined Landkreis & Stadt — having geometry class as multipolygon.
+3. It reads each city's boundary from a .gpkg file and performs a geometric union to extract the outermost boundary, which is then used to cut the simulation network accordingly.
+4. It processes cities sequentially and provides detailed logging for each step. It verifies the existence and validity of required output files.
 '''
 
-#insert the Bavarian city names according to requirement
+#The list of Bavarian city names according to requirement
 cities = ['augsburg', 'nürnberg', 'regensburg', 'ingolstadt', 'fürth', 'würzburg', 'erlangen', 'bamberg', 'landshut', 
               'bayreuth', 'aschaffenburg', 'kempten','rosenheim','schweinfurt','münchen','neu-ulm'] 
 
 def check_city_output(output_path: Path, city_prefix: str) -> bool:
     """
-    Check if the city has already been processed successfully
+    Check if the required output files have been generated successfully for the Bavarian city.
     """
     if not output_path.exists():
         return False
@@ -54,7 +54,21 @@ def check_city_output(output_path: Path, city_prefix: str) -> bool:
 
 def get_full_extent(gpkg_path: Path) -> Path:
     '''
-    This function is used to get the full extent of the city by merging all the polygons in the gpkg file.
+    Reads a city boundary from a .gpkg file and computes its full geometric extent.
+
+    This function is designed to handle cases where a city’s boundary may consist of 
+    multiple polygons or a MultiPolygon (e.g., disconnected areas, Stadt + Landkreis).
+    It performs a geometric union (`unary_union`) to merge all shapes into a single 
+    outer boundary, which represents the complete extent of the area.
+
+    The resulting geometry is saved as a temporary .gpkg file, which is later used
+    for cutting the simulation network for the city.
+
+    Parameters:
+        gpkg_path (Path): Path to the input .gpkg boundary file.
+
+    Returns:
+        Path: Path to the newly created temporary .gpkg file containing the merged geometry.
     '''
     gdf = gpd.read_file(gpkg_path)
     full_union = gdf.unary_union
@@ -69,7 +83,7 @@ def get_full_extent(gpkg_path: Path) -> Path:
 
 def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = False) -> None:
     """
-    Cut the network for a single city using RunScenarioCutter
+    Cut the network for a single city using RunScenarioCutter from the jar file, in our case the bavaria_run.jar file.
     """
     # Convert all paths to absolute paths
     jar_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_run.jar"
@@ -82,7 +96,7 @@ def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = Fal
     temp_extent_path = None
 
     try:
-        if city in cities::
+        if city in cities:
             print(f"Using full extent (Stadt + Landkreis) for {city}")
             temp_extent_path = get_full_extent(original_extent_path)
 
@@ -151,6 +165,9 @@ def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = Fal
                 print(f"Warning: Failed to clean up temporary file {temp_extent_path}: {e}")
 
 def main():
+    '''
+    Main function to process all cities in the cities list.
+    '''
     base_dir = Path(__file__).parent.parent.parent
     for city in cities:
         print(f"\nProcessing {city} city:")
