@@ -6,6 +6,7 @@ import multiprocessing
 from pathlib import Path
 import geopandas as gpd
 import time
+from shapely.geometry import MultiPolygon
 
 '''
 1. This script processes city-specific simulation data by cutting the network for each city using the RunScenarioCutter.
@@ -56,7 +57,7 @@ def get_full_extent(gpkg_path: Path) -> Path:
     '''
     Reads a city boundary from a .gpkg file and computes its full geometric extent.
 
-    This function is designed to handle cases where a city’s boundary may consist of 
+    This function is designed to handle cases where a city's boundary may consist of 
     multiple polygons or a MultiPolygon (e.g., disconnected areas, Stadt + Landkreis).
     It performs a geometric union (`unary_union`) to merge all shapes into a single 
     outer boundary, which represents the complete extent of the city (Stadt + Landkreis or just Stadt or just Landkreis, whichever is the case).
@@ -72,6 +73,9 @@ def get_full_extent(gpkg_path: Path) -> Path:
     '''
     gdf = gpd.read_file(gpkg_path)
     full_union = gdf.unary_union
+    if isinstance(full_union, MultiPolygon):
+        print(f"MultiPolygon detected, selecting largest component")
+        full_union = max(full_union.geoms, key=lambda p: p.area)
     full_gdf = gpd.GeoDataFrame(geometry=[full_union], crs=gdf.crs)
 
     # Properly create the output file name using Path
@@ -166,11 +170,44 @@ def cut_network_for_city(city: str, base_dir: Path) -> None:
 def main():
     '''
     Main function to process all cities in the cities list.
+    Skips cities that have already been processed successfully.
     '''
     base_dir = Path(__file__).parent.parent.parent
+    processed_cities = []
+    skipped_cities = []
+    
     for city in cities:
-        print(f"\nProcessing {city} city:")
-        cut_network_for_city(city, base_dir)    
+        print(f"\nChecking {city}:")
+        output_path = base_dir / "data" / "simulation_data_per_city_new" / city
+        city_prefix = f"{city}_"
+        
+        if check_city_output(output_path, city_prefix):
+            print(f"Skipping {city} - all required files exist")
+            skipped_cities.append(city)
+            continue
+            
+        print(f"Processing {city} city:")
+        try:
+            cut_network_for_city(city, base_dir)
+            processed_cities.append(city)
+        except Exception as e:
+            print(f"Error processing {city}: {e}")
+    
+    # Print summary
+    print("\nProcessing Summary:")
+    print(f"Total cities: {len(cities)}")
+    print(f"Processed: {len(processed_cities)}")
+    print(f"Skipped: {len(skipped_cities)}")
+    
+    if processed_cities:
+        print("\nProcessed cities:")
+        for city in processed_cities:
+            print(f"- {city}")
+    
+    if skipped_cities:
+        print("\nSkipped cities (already processed):")
+        for city in skipped_cities:
+            print(f"- {city}")
 
 if __name__ == "__main__":
     main()
