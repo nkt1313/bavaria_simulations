@@ -57,18 +57,13 @@ data/
     └── ...
 """
 
-import geopandas as gpd
-import networkx as nx
-import folium
-from pathlib import Path
-import xml.etree.ElementTree as ET
-import gzip
+import os
 import pandas as pd
+import geopandas as gpd
 import matplotlib.pyplot as plt
-from shapely.geometry import LineString
-import network_io as nio
-import argparse
+from pathlib import Path
 import logging
+from network_io import parse_nodes, parse_edges
 
 # Set up logging
 logging.basicConfig(
@@ -77,142 +72,116 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def plot_network(edges_df: pd.DataFrame, city_name: str, output_path: Path, is_merged: bool = False):
+def matsim_network_to_gdf(network_path: Path) -> tuple:
     """
-    Create a static matplotlib plot of the network
+    Convert MATSim network XML file to GeoDataFrame.
+    Returns tuple of (nodes_dict, df_edges, gdf)
     """
-    plt.figure(figsize=(15, 15))
+    # Parse nodes and edges using network_io
+    nodes_dict = parse_nodes(network_path)
+    df_edges = parse_edges(network_path)
     
-    # Plot different road types in different colors
-    for _, row in edges_df.iterrows():
-        coords = list(row['geometry'].coords)
-        x_coords = [x for x, y in coords]
-        y_coords = [y for x, y in coords]
-        
-        # Color scheme based on road properties
-        freespeed = float(row.get('freespeed', 0))
-        capacity = float(row.get('capacity', 0))
-        
-        if freespeed > 30:  # Major roads
-            plt.plot(x_coords, y_coords, 'r-', linewidth=1, alpha=0.6)
-        elif capacity > 1000:  # Medium roads
-            plt.plot(x_coords, y_coords, 'g-', linewidth=1, alpha=0.4)
-        else:  # Minor roads
-            plt.plot(x_coords, y_coords, 'black', linewidth=1, alpha=0.2)
+    # Create GeoDataFrame from edges
+    gdf = gpd.GeoDataFrame(df_edges, geometry='geometry', crs='EPSG:25832')
+    
+    return nodes_dict, df_edges, gdf
 
-    title = f"{city_name} {'Merged ' if is_merged else ''}Road Network"
-    plt.title(title)
-    plt.axis('equal')
-    plt.grid(True, alpha=0.2)
-    
-    # Add legend
-    from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], color='r', linewidth=1.5, label='Major Roads'),
-        Line2D([0], [0], color='blue', linewidth=1, label='Medium Roads'),
-        Line2D([0], [0], color='black', linewidth=0.5, label='Minor Roads')
-    ]
-    plt.legend(handles=legend_elements, loc='upper right')
-    
-    # Save plot
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close()
-
-def analyze_networks(base_dir: Path, cities: list = None, is_merged: bool = False, is_for_landkreis: bool = False):
+def analyze_network_files():
     """
-    Analyze and plot networks for specified cities or Landkreise
-    
-    Args:
-        base_dir: Base directory for all paths
-        cities: List of cities to process
-        is_merged: Whether to analyze merged networks
-        is_for_landkreis: Whether to analyze Landkreis networks
+    Analyze network files for each city from the cut_simulations_general.py output.
+    Generates and saves plots in the same output directory.
     """
-    # Validate base directory
-    if not base_dir.exists():
-        raise FileNotFoundError(f"Base directory not found: {base_dir}")
+    # Get the base directory (same as in cut_simulations_general.py)
+    base_dir = Path(__file__).parent.parent.parent
     
-    # Set up data directory based on network type and entity type
-    if is_merged:
-        data_dir = base_dir / "data" / "merged_networks"
-        file_pattern = "{}_merged_network.xml.gz"
-    else:
-        data_dir = base_dir / "data" / "simulation_data_per_city_new"
-        file_pattern = "{}_network.xml.gz"
+    # Define the cities list (same as in cut_simulations_general.py)
+    cities = ['augsburg', 'nuernberg', 'regensburg', 'ingolstadt', 'fuerth', 'wuerzburg', 
+              'erlangen', 'bamberg', 'landshut', 'bayreuth', 'aschaffenburg', 'kempten',
+              'rosenheim', 'schweinfurt', 'muenchen', 'neuulm']
     
-    if not data_dir.exists():
-        raise FileNotFoundError(f"Data directory not found: {data_dir}")
+    # Create a DataFrame to store results
+    results = []
     
-    # If no cities specified, process all cities in the directory
-    if not cities:
-        cities = [d.name for d in data_dir.iterdir() if d.is_dir()]
-        if not cities:
-            logger.warning("No cities found in directory")
-            return
-    
-    # Create output directory
-    output_dir = base_dir / "data" / "network_analysis"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    if not output_dir.exists():
-        raise FileNotFoundError(f"Failed to create output directory: {output_dir}")
-    
-    # Process each city or Landkreis
-    for entity_name in cities:
-        entity_dir = data_dir / entity_name
-        if not entity_dir.exists():
-            logger.warning(f"Directory not found for {entity_name}")
-            continue
-            
-        network_file = entity_dir / file_pattern.format(entity_name)
+    for city in cities:
+        print(f"\nAnalyzing {city}:")
+        city_dir = base_dir / "data" / "simulation_data_per_city_new" / city
+        network_path = city_dir / f"{city}_network.xml.gz"
         
-        if not network_file.exists():
-            logger.warning(f"Network file not found for {entity_name}: {network_file}")
+        if not network_path.exists():
+            print(f"Warning: Network file not found for {city}")
             continue
             
         try:
-            logger.info(f"\nProcessing {entity_name}...")
+            # Parse the network file
+            nodes_dict, df_edges, gdf = matsim_network_to_gdf(network_path)
             
-            # Parse network
-            nodes = nio.parse_nodes(network_file)
-            edges_df = nio.parse_edges(network_file, nodes)
+            # Calculate statistics
+            stats = {
+                'city': city,
+                'num_nodes': len(nodes_dict),
+                'num_links': len(df_edges),
+                'total_length_km': df_edges['length'].sum() / 1000,  # Convert to km
+                'avg_link_length_m': df_edges['length'].mean(),
+                'max_link_length_m': df_edges['length'].max(),
+                'min_link_length_m': df_edges['length'].min(),
+                'total_capacity': df_edges['capacity'].sum(),
+                'avg_capacity': df_edges['capacity'].mean(),
+                'num_freespeed_links': len(df_edges[df_edges['freespeed'] > 0]),
+                'avg_freespeed': df_edges['freespeed'].mean(),
+                'num_lanes': df_edges['lanes'].sum(),
+                'avg_lanes': df_edges['lanes'].mean()
+            }
             
-            if len(nodes) == 0 or len(edges_df) == 0:
-                logger.warning(f"Empty network for {entity_name}")
-                continue
+            # Add road type distribution if available
+            if 'highway' in df_edges.columns:
+                road_types = df_edges['highway'].value_counts()
+                for road_type, count in road_types.items():
+                    stats[f'num_{road_type}'] = count
+                    stats[f'pct_{road_type}'] = (count / len(df_edges)) * 100
             
-            # Add additional analysis for Landkreis networks
-            if is_for_landkreis:
-                # Analyze city vs non-city edges
-                city_edges = edges_df[edges_df['scenario_edge'] == 'true']
-                non_city_edges = edges_df[edges_df['scenario_edge'] == 'false']
+            results.append(stats)
+            
+            # Create and save plot for this city
+            if 'highway' in df_edges.columns:
+                # Create figure
+                fig, ax = plt.subplots(figsize=(15, 10))
                 
-                logger.info(f"Network statistics for {entity_name}:")
-                logger.info(f"Total nodes: {len(nodes)}")
-                logger.info(f"Total links: {len(edges_df)}")
-                logger.info(f"City links: {len(city_edges)}")
-                logger.info(f"Non-city links: {len(non_city_edges)}")
+                # Plot network in gray
+                gdf.plot(ax=ax, color='gray', linewidth=0.5)
+                
+                ax.set_title(f'Road Network - {city.capitalize()}')
+                ax.axis('off')
+                
+                # Adjust layout and save
+                plt.tight_layout()
+                plot_path = city_dir / f"{city}_network_analysis.png"
+                plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+                plt.close()
+                print(f"Saved plot to: {plot_path}")
             
-            # Create and save static plot
-            plot_name = f"{entity_name}_{'merged_' if is_merged else ''}network.png"
-            plot_file = output_dir / plot_name
-            plot_network(edges_df, entity_name, plot_file, is_merged)
-            logger.info(f"Network plot saved to: {plot_file}")
+            print(f"Successfully analyzed {city}")
             
         except Exception as e:
-            logger.error(f"Error processing {entity_name}: {e}")
-            continue
-
-def main():
-    base_dir = Path(__file__).parent.parent.parent
+            print(f"Error analyzing {city}: {e}")
     
-    # Process Augsburg city
-    print("\nProcessing Augsburg city:")
-    cut_network_for_city("augsburg", base_dir, is_for_landkreis=False)
+    # Create DataFrame from results
+    df_results = pd.DataFrame(results)
     
-    # Process Augsburg Landkreis
-    print("\nProcessing Augsburg Landkreis:")
-    cut_network_for_city("augsburg_landkreis", base_dir, is_for_landkreis=True)
+    # Save results to CSV in the base output directory
+    output_path = base_dir / "data" / "network_analysis_results.csv"
+    df_results.to_csv(output_path, index=False)
+    print(f"\nResults saved to: {output_path}")
+    
+    # Print summary statistics
+    print("\nSummary Statistics:")
+    print(f"Total cities analyzed: {len(df_results)}")
+    print("\nAverage values across cities:")
+    for col in df_results.columns:
+        if col != 'city':
+            print(f"{col}: {df_results[col].mean():.2f}")
+    
+    return df_results
 
 if __name__ == "__main__":
-    main()
+    df_results = analyze_network_files()
 
