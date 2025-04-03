@@ -15,8 +15,8 @@ import time
 '''
 
 #The list of Bavarian city names according to requirement
-cities = ['augsburg', 'nürnberg', 'regensburg', 'ingolstadt', 'fürth', 'würzburg', 'erlangen', 'bamberg', 'landshut', 
-              'bayreuth', 'aschaffenburg', 'kempten','rosenheim','schweinfurt','münchen','neu-ulm'] 
+cities = ['augsburg', 'nuernberg', 'regensburg', 'ingolstadt', 'fuerth', 'wuerzburg', 'erlangen', 'bamberg', 'landshut', 
+              'bayreuth', 'aschaffenburg', 'kempten','rosenheim','schweinfurt','muenchen','neuulm'] 
 
 def check_city_output(output_path: Path, city_prefix: str) -> bool:
     """
@@ -59,9 +59,9 @@ def get_full_extent(gpkg_path: Path) -> Path:
     This function is designed to handle cases where a city’s boundary may consist of 
     multiple polygons or a MultiPolygon (e.g., disconnected areas, Stadt + Landkreis).
     It performs a geometric union (`unary_union`) to merge all shapes into a single 
-    outer boundary, which represents the complete extent of the area.
+    outer boundary, which represents the complete extent of the city (Stadt + Landkreis or just Stadt or just Landkreis, whichever is the case).
 
-    The resulting geometry is saved as a temporary .gpkg file, which is later used
+    The resulting geometry(which is a single polygon) is saved as a temporary .gpkg file, which is later used
     for cutting the simulation network for the city.
 
     Parameters:
@@ -78,10 +78,9 @@ def get_full_extent(gpkg_path: Path) -> Path:
     temp_file = gpkg_path.parent / f"{gpkg_path.stem}_combined_temp.gpkg"
     full_gdf.to_file(temp_file, driver="GPKG")
     return temp_file
-    return temp_file
 
 
-def cut_network_for_city(city: str, base_dir: Path, is_for_landkreis: bool = False) -> None:
+def cut_network_for_city(city: str, base_dir: Path) -> None:
     """
     Cut the network for a single city using RunScenarioCutter from the jar file, in our case the bavaria_run.jar file.
     """
@@ -171,7 +170,7 @@ def main():
     base_dir = Path(__file__).parent.parent.parent
     for city in cities:
         print(f"\nProcessing {city} city:")
-        cut_network_for_city(city, base_dir, is_for_landkreis=False)    
+        cut_network_for_city(city, base_dir)    
 
 if __name__ == "__main__":
     main()
