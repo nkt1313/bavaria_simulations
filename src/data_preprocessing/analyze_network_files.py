@@ -130,54 +130,77 @@ def analyze_network_files():
     # Create a DataFrame to store results
     results = []
     
-    for city in cities:
-        print(f"\nAnalyzing {city}:")
-        city_dir = base_dir / "data" / "simulation_data_per_city_new" / city
-        network_path = city_dir / f"{city}_network.xml.gz"
+    # Create log file
+    log_path = base_dir / "data" / "network_analysis.log"
+    with open(log_path, 'w') as log_file:
+        log_file.write(f"Network Analysis Log - Started at {pd.Timestamp.now()}\n\n")
         
-        if not network_path.exists():
-            print(f"Warning: Network file not found for {city}")
-            continue
+        for city in cities:
+            log_file.write(f"\n{'='*50}\n")
+            log_file.write(f"Processing city: {city}\n")
+            print(f"\nAnalyzing {city}:")
             
-        try:
-            # Parse the network file
-            nodes_df, links_gdf = parse_network(network_path)
+            city_dir = base_dir / "data" / "simulation_data_per_city_new" / city
+            network_path = city_dir / f"{city}_network.xml.gz"
             
-            # Calculate statistics
-            stats = {
-                'city': city,
-                'num_nodes': len(nodes_df),
-                'num_links': len(links_gdf),
-                'total_length_km': links_gdf.geometry.length.sum() / 1000,  # Convert to km
-                'avg_link_length_m': links_gdf.geometry.length.mean(),
-                'max_link_length_m': links_gdf.geometry.length.max(),
-                'min_link_length_m': links_gdf.geometry.length.min()
-            }
-            
-            results.append(stats)
-            
-            # Create and save plot
-            fig, ax = plt.subplots(figsize=(15, 15))
-            links_gdf.plot(ax=ax, linewidth=0.5, color='gray')
-            nodes_df.plot(ax=ax, markersize=1, color='red')
-            ax.set_title(f"Network - {city.capitalize()}")
-            ax.axis("equal")
-            
-            # Save plot
-            plot_path = city_dir / f"{city}_network_analysis.png"
-            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-            plt.close()
-            print(f"Saved plot to: {plot_path}")
-            
-            # Save individual city DataFrame
-            city_df = pd.DataFrame([stats])
-            city_df.to_csv(city_dir / f"{city}_network_stats.csv", index=False)
-            print(f"Saved city statistics to: {city_dir / f'{city}_network_stats.csv'}")
-            
-            print(f"Successfully analyzed {city}")
-            
-        except Exception as e:
-            print(f"Error analyzing {city}: {e}")
+            if not network_path.exists():
+                msg = f"Warning: Network file not found for {city}"
+                print(msg)
+                log_file.write(f"{msg}\n")
+                continue
+                
+            try:
+                # Parse the network file
+                log_file.write("Parsing network file...\n")
+                nodes_df, links_gdf = parse_network(network_path)
+                log_file.write(f"Found {len(nodes_df)} nodes and {len(links_gdf)} links\n")
+                
+                # Calculate statistics
+                stats = {
+                    'city': city,
+                    'num_nodes': len(nodes_df),
+                    'num_links': len(links_gdf),
+                    'total_length_km': links_gdf.geometry.length.sum() / 1000,  # Convert to km
+                    'avg_link_length_m': links_gdf.geometry.length.mean(),
+                    'max_link_length_m': links_gdf.geometry.length.max(),
+                    'min_link_length_m': links_gdf.geometry.length.min()
+                }
+                
+                results.append(stats)
+                
+                # Create and save plot
+                log_file.write("Creating network visualization...\n")
+                fig, ax = plt.subplots(figsize=(15, 15))
+                links_gdf.plot(ax=ax, linewidth=0.5, color='gray')
+                nodes_df.plot(ax=ax, markersize=1, color='red')
+                ax.set_title(f"Network - {city.capitalize()}")
+                ax.axis("equal")
+                
+                # Save plot
+                plot_path = city_dir / f"{city}_network_analysis.png"
+                plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+                plt.close()
+                msg = f"Saved plot to: {plot_path}"
+                print(msg)
+                log_file.write(f"{msg}\n")
+                
+                # Save individual city DataFrame
+                city_df = pd.DataFrame([stats])
+                stats_path = city_dir / f"{city}_network_stats.csv"
+                city_df.to_csv(stats_path, index=False)
+                msg = f"Saved city statistics to: {stats_path}"
+                print(msg)
+                log_file.write(f"{msg}\n")
+                
+                msg = f"Successfully analyzed {city}"
+                print(msg)
+                log_file.write(f"{msg}\n")
+                
+            except Exception as e:
+                msg = f"Error analyzing {city}: {e}"
+                print(msg)
+                log_file.write(f"{msg}\n")
+                log_file.write(f"Error details: {str(e)}\n")
     
     # Create DataFrame from results
     df_results = pd.DataFrame(results)
@@ -185,16 +208,26 @@ def analyze_network_files():
     # Save results to CSV in the base output directory
     output_path = base_dir / "data" / "network_analysis_results.csv"
     df_results.to_csv(output_path, index=False)
-    print(f"\nResults saved to: {output_path}")
+    msg = f"\nResults saved to: {output_path}"
+    print(msg)
+    log_file.write(f"{msg}\n")
     
-    # Print summary statistics
+    # Print and log summary statistics
+    log_file.write("\nSummary Statistics:\n")
+    log_file.write(f"Total cities analyzed: {len(df_results)}\n")
+    log_file.write("\nAverage values across cities:\n")
+    
     print("\nSummary Statistics:")
     print(f"Total cities analyzed: {len(df_results)}")
     print("\nAverage values across cities:")
     for col in df_results.columns:
         if col != 'city':
-            print(f"{col}: {df_results[col].mean():.2f}")
+            value = df_results[col].mean()
+            msg = f"{col}: {value:.2f}"
+            print(msg)
+            log_file.write(f"{msg}\n")
     
+    log_file.write(f"\nNetwork Analysis completed at {pd.Timestamp.now()}\n")
     return df_results
 
 if __name__ == "__main__":
