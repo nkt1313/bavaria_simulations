@@ -16,19 +16,11 @@ from shapely.geometry import shape
 import numpy as np
 #######################################################################adjust according to working directory##############################################################
 # Define the path to the Downloaded GeoPackage file
-<<<<<<< HEAD
 os.chdir(r"C:\Users\nktba\bavaria_simulations") # Set working directory
 gpkg_path = os.path.join("data", "DE_VG250.gpkg") # Define relative path to the GeoPackage
 gdf_districts = gpd.read_file(gpkg_path, layer="vg250_krs") # vg250_krs is the layer name for districts
 output_path = os.path.join("data", "output", "boundary_files")  # Directory to store JSON and GPKG files
 
-=======
-os.chdir(r"C:\Users\nktba\upstream\bavaria_simulations") # Set working directory
-gpkg_path = os.path.join("data", "DE_VG250.gpkg") # Define relative path to the GeoPackage
-gdf_districts = gpd.read_file(gpkg_path, layer="vg250_krs") # vg250_krs is the layer name for districts
-output_path = os.path.join("data", "output", "boundary_files")  # Directory to store JSON and GPKG files
-####################################################################### X ################################################################################################
->>>>>>> bbc18b54c425c0532359264592e72adc317c42dd
 def gpkg_json_converter(city_name):
     """
     Extracts features for a city from the GeoDataFrame and
