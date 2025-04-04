@@ -41,8 +41,13 @@ src/data_preprocessing/__pycache__/*
 src/data_preprocessing/cache/*
 
 simulation_output/*
+<<<<<<< HEAD
 
 # Ignore top-level input and output folders
 /data/
 /cache/
 hs_err_pid*.log
+=======
+src/data_preprocessing/cache
+src/data_preprocessing/cache
+>>>>>>> bbc18b54c425c0532359264592e72adc317c42dd
