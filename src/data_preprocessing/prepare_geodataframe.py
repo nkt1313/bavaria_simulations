@@ -925,18 +925,16 @@ def analyze_centrality_measures(gdf_edges_with_hex, output_dir, city_only=True):
         # Compute centrality measures
         print("Computing betweenness centrality...")
         betweenness = nx.betweenness_centrality(G, weight='length')
-        #betweenness = parallel_edge_betweenness(G, weight='length', processes=8)
         
         print("Computing edge closeness centrality...")
-        closeness = edge_closeness_centrality(G,centrality_weight='length')
+        closeness = edge_closeness_centrality(G, centrality_weight='length')
         
         # Create DataFrame for centrality measures
-        
         centrality_df = pd.DataFrame({
-            'from_node': [u for u, v in betweenness.keys()],
-            'to_node': [v for u, v in betweenness.keys()],
-            'link_id': [G[u][v].get('id', f"{u}-{v}") for u, v in betweenness.keys()],
-            'betweenness': list(betweenness.values()),
+            'from_node': [u for u, v in closeness.keys()],
+            'to_node': [v for u, v in closeness.keys()],
+            'link_id': [G[u][v].get('id', f"{u}-{v}") for u, v in closeness.keys()],
+            'betweenness': [betweenness.get(u, 0) for u, _ in closeness.keys()],
             'closeness': list(closeness.values())
         })
         
