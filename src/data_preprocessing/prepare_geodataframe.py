@@ -45,7 +45,7 @@ administrative_boundary_json_path = base_dir / "data" / "city_boundaries" / "aug
 csv_filepath=  base_dir / "data" / "simulation_output" / 'output_links.csv.gz'
 #csv_output_path = csv_dir/f"augsburg"/f"augsburg_seed_1/augsburg_output_links.csv"
 #output_base_path = os.path.join(base_dir, "data", "output", "network_files")
-output_base_path = base_dir / "data" / 
+output_base_path = base_dir / "data"
 
 #Define variables
 hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
@@ -936,4 +936,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
