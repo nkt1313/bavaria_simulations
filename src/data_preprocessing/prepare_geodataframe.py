@@ -28,6 +28,11 @@ import logging
 import networkx as nx
 import seaborn as sns
 from matplotlib.colors import Normalize
+import networkx as nx
+import multiprocessing as mp
+from itertools import islice
+from functools import reduce
+from collections import Counter
 '''
 This script is used to prepare the geodataframe for the network files.
 It is used to create the geodataframe for the network files and to prepare the geodataframe for creating the subgraphs.
@@ -618,6 +623,39 @@ from matplotlib.colors import Normalize
 import os
 import logging
 
+def chunks(lst, n):
+    """Split list into n roughly equal chunks"""
+    k, m = divmod(len(lst), n)
+    return [lst[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
+
+def compute_edge_betweenness_for_chunk(args):
+    G, nodes, weight = args
+    return nx.edge_betweenness_centrality_subset(G, sources=nodes, targets=None, weight=weight)
+
+def parallel_edge_betweenness(G, weight='length', processes=None):
+    nodes = list(G.nodes())
+    n_processes = processes or mp.cpu_count()
+    node_chunks = chunks(nodes, n_processes)
+
+    print(f"Running on {n_processes} processes...")
+
+    with mp.Pool(processes=n_processes) as pool:
+        results = pool.map(compute_edge_betweenness_for_chunk, [(G, chunk, weight) for chunk in node_chunks])
+
+    # Merge all partial results
+    combined = reduce(lambda x, y: Counter(x) + Counter(y), results)
+    
+    # Normalize like NetworkX does
+    scale = 1.0 / ((len(G) - 1) * (len(G) - 2))
+    if not G.is_directed():
+        scale *= 2.0
+    for k in combined:
+        combined[k] *= scale
+
+    return dict(combined)
+
+
+
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -690,27 +728,29 @@ import numpy as np
 import networkx as nx
 import numpy as np
 
-def edge_closeness_centrality(G, weight='length'):
+def edge_closeness_centrality(G, centrality_weight='length'):
     edge_closeness = {}
     
     print("\n=== Edge Closeness Centrality Calculation ===")
     print(f"Total nodes: {G.number_of_nodes()}")
     print(f"Total edges: {G.number_of_edges()}")
-    print("--------------------------------------------")
 
-    # For directed graphs, use strongly connected components
-    def get_reachable_nodes(G, start_node):
-        return set(nx.descendants(G, start_node)) | {start_node}
-
-    print("Calculating reachable nodes for each node...")
+    # Get strongly connected components
+    scc = list(nx.strongly_connected_components(G))
     node_to_component = {}
-    for node in G.nodes():
-        node_to_component[node] = get_reachable_nodes(G, node)
-    
-    print(f"Nodes with reachable components: {len(node_to_component)}")
-    print("--------------------------------------------")
+    for component in scc:
+        for node in component:
+            node_to_component[node] = component
 
-    print("Calculating edge centrality...")
+    # Calculate component sizes
+    component_sizes = {node: len(component) for node, component in node_to_component.items()}
+    
+    print("\nComponent size distribution:")
+    size_distribution = Counter(component_sizes.values())
+    for size, count in sorted(size_distribution.items()):
+        print(f"Components of size {size}: {count}")
+
+    print("\nCalculating edge centrality...")
     total_edges = G.number_of_edges()
     processed_edges = 0
     zero_centrality = 0
@@ -718,29 +758,39 @@ def edge_closeness_centrality(G, weight='length'):
 
     for u, v in G.edges():
         processed_edges += 1
-        if processed_edges % 1000 == 0:  # Progress update every 1000 edges
+        if processed_edges % 1000 == 0:
             print(f"Processed {processed_edges}/{total_edges} edges...")
 
-        # Get the component nodes for the edge's source
-        component_nodes = node_to_component.get(u, set())
+        # Get component size
+        component_size = component_sizes[u]
         
-        if v not in component_nodes:
+        # Only handle isolated nodes differently
+        if component_size == 1:  # Isolated node
             edge_closeness[(u, v)] = 0.0000000
             zero_centrality += 1
             continue
 
-        # Compute weighted shortest paths from u and v
-        dist_u = nx.single_source_dijkstra_path_length(G, u, weight=weight)
-        dist_v = nx.single_source_dijkstra_path_length(G, v, weight=weight)
+        # Calculate shortest paths from source node
+        dist_u = nx.single_source_dijkstra_path_length(G, u, weight=centrality_weight)
         
+        # Calculate total distance and count reachable nodes
         total_distance = 0
         reachable_count = 0
-        for node in component_nodes:
-            if node != u and node != v:
-                total_distance += dist_u.get(node, 0) + dist_v.get(node, 0)
-                reachable_count += 1
+        
+        for node in node_to_component[u]:
+            if node != u and node != v:  # Exclude source and target nodes
+                distance = dist_u.get(node, 0)
+                if distance > 0:  # Only count actually reachable nodes
+                    total_distance += distance
+                    reachable_count += 1
 
-        centrality = round(1 / total_distance, 7) if total_distance > 0 else 0.0000000
+        # Calculate normalized centrality
+        if reachable_count > 0:
+            average_distance = total_distance / reachable_count
+            centrality = round(1 / average_distance, 7) if average_distance > 0 else 0.0000000
+        else:
+            centrality = 0.0000000
+
         edge_closeness[(u, v)] = centrality
         
         if centrality > 0:
@@ -754,7 +804,7 @@ def edge_closeness_centrality(G, weight='length'):
     print(f"Edges with zero centrality: {zero_centrality}")
     print(f"Percentage of edges with non-zero centrality: {(non_zero_centrality/processed_edges)*100:.2f}%")
     
-    # Calculate and print centrality statistics
+    # Print centrality statistics for non-zero values
     centrality_values = [v for v in edge_closeness.values() if v > 0]
     if centrality_values:
         print("\nCentrality Statistics (non-zero values only):")
@@ -874,7 +924,7 @@ def analyze_centrality_measures(gdf_edges_with_hex, output_dir, city_only=True):
         
         # Compute centrality measures
         print("Computing betweenness centrality...")
-        betweenness = nx.edge_betweenness_centrality(G,weight='length')
+        betweenness = parallel_edge_betweenness(G, weight='length', processes=8)
         
         print("Computing edge closeness centrality...")
         closeness = edge_closeness_centrality(G,weight='length')
