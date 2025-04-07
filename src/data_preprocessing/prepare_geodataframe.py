@@ -928,7 +928,7 @@ def analyze_centrality_measures(gdf_edges_with_hex, output_dir, city_only=True):
         #betweenness = parallel_edge_betweenness(G, weight='length', processes=8)
         
         print("Computing edge closeness centrality...")
-        closeness = edge_closeness_centrality(G,weight='length')
+        closeness = edge_closeness_centrality(G,centrality_weight='length')
         
         # Create DataFrame for centrality measures
         
