@@ -388,14 +388,14 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             links = ET.SubElement(root, 'links')
             for _, edge in gdf_edges_with_hex.iterrows():
                 link = ET.SubElement(links, 'link')
-                link.set('id', str(edge['id']))
+                link.set('id', str(edge['link']))
                 link.set('from', str(edge['from_node']))
                 link.set('to', str(edge['to_node']))
                 link.set('length', str(edge['length']))
                 link.set('freespeed', str(edge['freespeed']))
                 
                 # Adjust capacity if edge is in scenario hexagons
-                if (edge['id'] in scenario_edges['id'].values and 
+                if (edge['link'] in scenario_edges['link'].values and
                     edge['betweenness'] <= betweenness_centrality_cutoff and 
                     edge['closeness'] <= closeness_centrality_cutoff):
                     capacity = float(edge['capacity']) * capacity_tuning_factor
