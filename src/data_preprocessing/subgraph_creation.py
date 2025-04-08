@@ -67,7 +67,7 @@ from matplotlib.colors import Normalize
 
 # Local imports
 import network_io as nio
-from hexagon_creation_and_plot import matsim_network_input_to_gdf,clean_duplicates_based_on_modes,create_nodes_dict, multipolygon_to_polygon, modify_districts_geodataframe, merge_edges_with_districts, generate_hexagon_grid_for_districts,consolidate_road_types, check_hexagon_statistics, plot_grid_and_edges
+from hexagon_creation_and_plot import matsim_network_input_to_gdf,clean_duplicates_based_on_modes,create_nodes_dict, multipolygon_to_polygon, modify_districts_geodataframe, merge_edges_with_districts, generate_hexagon_grid_for_districts,consolidate_road_types, check_hexagon_statistics, plot_grid_and_edges,convert_and_save_geodataframe
 from betweenness_and_closeness import edge_closeness_centrality, analyze_centrality_measures,create_network_from_csv,verify_components
 
 def setup_output_directories(base_dir, city_name, seed_number):
@@ -149,7 +149,7 @@ distribution_mean_factor = 5
 distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
 seed_number = 13 #This is the seed number for the random number generator
 ######## City Names #######################################################################################################
-city_name = 'Augsburg'
+city_name = 'augsburg'
 ########################################################################################################################
 output_dirs = setup_output_directories(base_dir, city_name, seed_number)
 
@@ -628,10 +628,10 @@ def main():
     check_hexagon_statistics(gdf_edges_with_hex, hexagon_grid_all)
     #plot the grid and the edges
     plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all,districts_gdf,output_dirs,city_name)
-    #save the resulting geodataframe for that city
-    gdf_edges_with_hex.to_file(output_dirs['hexagon_data'] / f'{city_name}_hexagon_edges.geojson', driver='GeoJSON')
+    # Save the GeoDataFrame using the new function
+    convert_and_save_geodataframe(gdf_edges_with_hex, output_dirs['hexagon_data'] / f'{city_name}_hexagon_edges.geojson')
     
-    #### Betweenness and Closeness Centrality ############################################################
+    #calculate the betweenness and closeness centrality####################################################
     
     centrality_df, gdf_edges_with_hex, G = analyze_centrality_measures(gdf_edges_with_hex, output_dirs, city_only=True)
     size_counts, largest_component= verify_components(G) 
@@ -644,7 +644,7 @@ def main():
     scenario_labels = generate_scenario_labels(road_type_subsets)
     #create the scenario networks
     create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
-                             city_name="Augsburg", seed_number=seed_number, 
+                             city_name=city_name, seed_number=seed_number, 
                              output_dirs=output_dirs, nodes_dict=nodes_dict,
                              capacity_tuning_factor=capacity_tuning_factor,
                              betweenness_centrality_cutoff=betweenness_centrality_cutoff,
