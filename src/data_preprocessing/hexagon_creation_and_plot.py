@@ -573,3 +573,26 @@ def plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all, districts_gdf, out
     
     # Close the plot to free memory
     plt.close()
+    
+def convert_and_save_geodataframe(gdf, output_path):
+    """
+    Convert a GeoDataFrame to GeoJSON format, handling list columns by converting them to strings.
+    
+    Parameters:
+    -----------
+    gdf : GeoDataFrame
+        The GeoDataFrame to convert and save
+    output_path : Path or str
+        Path where to save the GeoJSON file
+    """
+    # Create a copy to avoid modifying the original
+    gdf_save = gdf.copy()
+    
+    # Convert list columns to strings
+    for col in gdf_save.columns:
+        if gdf_save[col].dtype == object and isinstance(gdf_save[col].iloc[0], list):
+            gdf_save[col] = gdf_save[col].apply(lambda x: str(x))
+    
+    # Save to GeoJSON
+    gdf_save.to_file(output_path, driver='GeoJSON')
+    print(f"Saved GeoJSON file to: {output_path}")
