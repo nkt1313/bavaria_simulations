@@ -207,7 +207,7 @@ def create_nodes_dict(cleaned_network):
     for index, row in cleaned_network.iterrows():
         nodes_dict[row['from_node']] = row['geometry']
         nodes_dict[row['to_node']] = row['geometry']
-        print(f"Created nodes_dict with {len(nodes_dict)} unique nodes")
+    print(f"Created nodes_dict with {len(nodes_dict)} unique nodes")
     return nodes_dict
 
 def read_compressed_network_csv(csv_filepath, csv_output_path, crs='EPSG:25832'):
