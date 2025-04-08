@@ -31,6 +31,9 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.colors import Normalize
 
+# Local imports
+import network_io as nio
+
 def matsim_network_input_to_gdf(network_file):
     """
     Convert MATSim network XML to GeoDataFrame using network_io
