@@ -674,3 +674,7 @@ def main():
     edges_with_road_type
     edges_in_hexagons
     capacity_changes
+    
+if __name__ == "__main__":
+    main()
+
