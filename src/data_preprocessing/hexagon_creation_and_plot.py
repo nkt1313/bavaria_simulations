@@ -201,12 +201,19 @@ def clean_duplicates_based_on_modes(file_path):
 
 def create_nodes_dict(cleaned_network):
     '''
-    This function creates a dictionary of nodes and their geometries from a cleaned network
+    This function creates a dictionary of nodes and their coordinates from a cleaned network.
+    For each edge:
+    - from_node gets the coordinates of the start point of the LineString
+    - to_node gets the coordinates of the end point of the LineString
     '''
     nodes_dict = {}
     for index, row in cleaned_network.iterrows():
-        nodes_dict[row['from_node']] = row['geometry']
-        nodes_dict[row['to_node']] = row['geometry']
+        # Get the coordinates of the start and end points of the LineString
+        coords = list(row['geometry'].coords)
+        # Store start point coordinates for from_node
+        nodes_dict[row['from_node']] = coords[0]
+        # Store end point coordinates for to_node
+        nodes_dict[row['to_node']] = coords[-1]
     print(f"Created nodes_dict with {len(nodes_dict)} unique nodes")
     return nodes_dict
 
