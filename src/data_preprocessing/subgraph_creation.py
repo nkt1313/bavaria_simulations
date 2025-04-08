@@ -4,7 +4,8 @@ Steps:
 1. Create the hexagon grid for the city
 2. Create the subgraphs for each road type
 3. Create the scenario networks
-4. Cross check the created networks
+4. Cross check the first created scenario
+5. Plot the check for the first created scenario
 
 Folder structure for input data:
 data/
@@ -307,6 +308,10 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
         Dictionary containing node coordinates
     capacity_tuning_factor : float, optional
         Factor to adjust capacity for scenario edges (default: 0.5)
+        
+    Returns:
+    --------
+    Path : Path to the first created scenario file
     """
     # Get the networks directory from output_dirs
     networks_base = output_dirs['networks']
@@ -320,6 +325,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
     
     # Counter for total scenarios
     total_scenarios = 0
+    first_scenario_path = None
     
     # Process each road type and its scenarios
     for road_type, subsets in road_type_subsets.items():
@@ -338,10 +344,14 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             network_filename = f"network_seed{seed_number}_{label}.xml.gz"
             network_path = folder_path / network_filename
             
+            # Store the path of the first scenario
+            if first_scenario_path is None:
+                first_scenario_path = network_path
+            
             # Get edges in scenario hexagons (and the correct road type)
             scenario_mask = gdf_edges_with_hex['hexagon'].apply(
                 lambda x: any(h in subset for h in x) if isinstance(x, list) else False
-            ) & (gdf_edges_with_hex['highway_consolidated'] == road_type)
+            ) & (gdf_edges_with_hex['consolidated_road_type'] == road_type)
             
             scenario_edges = gdf_edges_with_hex[scenario_mask]
             
@@ -412,6 +422,8 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
     
     print(f"\nFinished creating {total_scenarios} network files for {city_name} (seed {seed_number})")
     print(f"Files are organized in folders under: {seed_dir}")
+    
+    return first_scenario_path
 
 
 def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, hexagon_grid_all, 
@@ -441,8 +453,8 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
     matsim_network, nodes_subgraph, edges_subgraph = matsim_network_input_to_gdf(check_output_subgraph_path)
     
     # Match the highway_consolidated column from gdf_edges_with_hex to matsim_network
-    highway_mapping = dict(zip(gdf_edges_with_hex['id'], gdf_edges_with_hex['highway_consolidated']))
-    matsim_network['highway_consolidated'] = matsim_network['id'].map(highway_mapping)
+    highway_mapping = dict(zip(gdf_edges_with_hex['id'], gdf_edges_with_hex['consolidated_road_type']))
+    matsim_network['consolidated_road_type'] = matsim_network['id'].map(highway_mapping)
     
     fig, ax = plt.subplots(figsize=(15, 15))
     
@@ -497,7 +509,7 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
     
     # Plot scenario edges that match the road type from scenario label
     road_type = key[0]  # Get the road type from the key
-    matching_edges = scenario_edges[scenario_edges['highway_consolidated'] == road_type]
+    matching_edges = scenario_edges[scenario_edges['consolidated_road_type'] == road_type]
     matching_edges.plot(ax=ax,
                        color='blue',
                        linewidth=0.5,
@@ -582,16 +594,16 @@ def cross_check_for_created_networks(check_output_subgraph_path, gdf_edges_with_
     
     # Get edges that match both hexagon and road type
     edges_in_selected_hexagon_and_road_type = edges_in_selected_hexagon[
-        edges_in_selected_hexagon['highway_consolidated'] == key[0]
+        edges_in_selected_hexagon['consolidated_road_type'] == key[0]
     ]
     
     # Create a comparison DataFrame for the capacity changes
     comparison_df = pd.DataFrame({
         'edge_id': edges_in_selected_hexagon['id'],
-        'road_type': edges_in_selected_hexagon['highway_consolidated'],
+        'road_type': edges_in_selected_hexagon['consolidated_road_type'],
         'original_capacity': edges_in_selected_hexagon['capacity'],
         'modified_capacity': matsim_network[matsim_network['id'].isin(edges_in_selected_hexagon['id'])]['capacity'],
-        'capacity_reduced': edges_in_selected_hexagon['highway_consolidated'] == key[0]
+        'capacity_reduced': edges_in_selected_hexagon['consolidated_road_type'] == key[0]
     })
     
     # Print summary statistics
@@ -642,8 +654,8 @@ def main():
     road_type_subsets = generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_number, target_size)
     #generate the scenario labels
     scenario_labels = generate_scenario_labels(road_type_subsets)
-    #create the scenario networks
-    create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
+    #create the scenario networks and get the first scenario path
+    first_scenario = create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
                              city_name=city_name, seed_number=seed_number, 
                              output_dirs=output_dirs, nodes_dict=nodes_dict,
                              capacity_tuning_factor=capacity_tuning_factor,
@@ -651,24 +663,26 @@ def main():
                              closeness_centrality_cutoff=closeness_centrality_cutoff)
     
     #### Check the created networks #######################################################################
+    print(f"\nChecking first created scenario: {first_scenario.name}")
+    
     #plot the check for the created networks
     matsim_network = plot_check_for_created_networks(
-    check_output_subgraph_path=check_output_subgraph_path,
-    districts_gdf=districts_gdf,
-    hexagon_grid_all=hexagon_grid_all,
-    gdf_edges_with_hex=gdf_edges_with_hex,
-    scenario_labels=scenario_labels,
-    road_type_subsets=road_type_subsets,
-    output_dirs=output_dirs  # Optional
+        check_output_subgraph_path=first_scenario,
+        districts_gdf=districts_gdf,
+        hexagon_grid_all=hexagon_grid_all,
+        gdf_edges_with_hex=gdf_edges_with_hex,
+        scenario_labels=scenario_labels,
+        road_type_subsets=road_type_subsets,
+        output_dirs=output_dirs
     )   
     
     #cross check the created networks
     edges_with_road_type, edges_in_hexagons, capacity_changes = cross_check_for_created_networks(
-    check_output_subgraph_path=check_output_subgraph_path,
-    gdf_edges_with_hex=gdf_edges_with_hex,
-    road_type_subsets=road_type_subsets,
-    scenario_labels=scenario_labels,
-    seed_number=0  # Optional
+        check_output_subgraph_path=first_scenario,
+        gdf_edges_with_hex=gdf_edges_with_hex,
+        road_type_subsets=road_type_subsets,
+        scenario_labels=scenario_labels,
+        seed_number=seed_number
     )  
     
     edges_with_road_type
