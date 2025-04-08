@@ -81,7 +81,7 @@ def setup_output_directories(base_dir, city_name, seed_number):
         seed_number: Seed number (e.g., 1)
     """
     # Keep the original base path
-    output_base_path = base_dir / "data"/ "subgraphs"
+    output_base_path = base_dir / "data"
     
     # Create city-specific seed directory name
     city_seed_dir = f"{city_name}_seed_{seed_number}"
@@ -105,8 +105,8 @@ def setup_output_directories(base_dir, city_name, seed_number):
             (path / "plots").mkdir(exist_ok=True)
         elif 'network_files' in str(path):
             (path / "validation").mkdir(exist_ok=True)
-            subgraph_path = path / "subgraphs" / city_seed_dir / "networks" / "networks_0"
-            subgraph_path.mkdir(parents=True, exist_ok=True)
+            networks_path = path / "subgraphs" / city_seed_dir / "networks" / "networks_0"
+            networks_path.mkdir(parents=True, exist_ok=True)
     
     # Return complete path dictionary
     return {
@@ -116,7 +116,7 @@ def setup_output_directories(base_dir, city_name, seed_number):
         'centrality_csv': output_paths['centrality'] / "csv",
         'centrality_plots': output_paths['centrality'] / "plots",
         'network_files': output_paths['network_files'],
-        'subgraphs': output_paths['network_files'] / "subgraphs" / city_seed_dir / "networks" / "networks_0",
+        'networks': output_paths['network_files'] / "subgraphs" / city_seed_dir / "networks" / "networks_0",
         'validation': output_paths['network_files'] / "validation"
     }
     
@@ -159,11 +159,11 @@ output_file = output_dirs['hexagon_plots'] / f'{city_name}_network_hexagon_distr
 # For centrality analysis
 csv_output = output_dirs['centrality_csv'] / 'centrality_measures.csv'
 
-# For subgraphs (with city-specific seed hierarchy)
-subgraph_output = output_dirs['subgraphs'] / f'{city_name}_network_residential_n7_s1.xml.gz'
+# For networks (with city-specific seed hierarchy)
+subgraph_output = output_dirs['networks'] / f'{city_name}_network_residential_n7_s1.xml.gz'
 
 #check output subgraph
-check_output_subgraph_path = output_dirs['subgraphs'] / f'{city_name}_network_residential_n7_s1.xml.gz'
+check_output_subgraph_path = output_dirs['networks'] / f'{city_name}_network_residential_n7_s1.xml.gz'
 ########################################################################################################################
 def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_number, target_size, 
                                         distribution_mean_factor=distribution_mean_factor, 
