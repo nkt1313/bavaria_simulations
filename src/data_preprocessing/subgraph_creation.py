@@ -410,14 +410,27 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             # Create the XML tree and save it
             tree = ET.ElementTree(root)
             
+            # Create the XML string with proper declaration
+            xml_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE network SYSTEM "http://www.matsim.org/files/dtd/network_v2.dtd">\n'
+            xml_str = xml_declaration + ET.tostring(root, encoding='unicode')
+            
+            # Ensure the directory exists
+            folder_path.mkdir(parents=True, exist_ok=True)
+            
             # Save as gzipped XML
             with gzip.open(network_path, 'wb') as f:
-                tree.write(f, encoding='utf-8', xml_declaration=True)
+                f.write(xml_str.encode('utf-8'))
+            
+            # Verify the file was created
+            if not network_path.exists():
+                print(f"Warning: Failed to create file {network_path}")
+            else:
+                print(f"Created scenario file: {network_path}")
             
             total_scenarios += 1
             
             # Print progress
-            if total_scenarios % 100 == 0:
+            if total_scenarios % 10 == 0:  # Changed from 100 to 10 for more frequent updates
                 print(f"Created {total_scenarios} network files...")
     
     print(f"\nFinished creating {total_scenarios} network files for {city_name} (seed {seed_number})")
