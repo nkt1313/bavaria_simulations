@@ -370,8 +370,8 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             nodes = ET.SubElement(root, 'nodes')
             node_ids = set()
             for _, edge in gdf_edges_with_hex.iterrows():
-                node_ids.add(edge['from'])
-                node_ids.add(edge['to'])
+                node_ids.add(edge['from_node'])
+                node_ids.add(edge['to_node'])
             
             for node_id in node_ids:
                 node = ET.SubElement(nodes, 'node')
@@ -389,8 +389,8 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             for _, edge in gdf_edges_with_hex.iterrows():
                 link = ET.SubElement(links, 'link')
                 link.set('id', str(edge['id']))
-                link.set('from', str(edge['from']))
-                link.set('to', str(edge['to']))
+                link.set('from', str(edge['from_node']))
+                link.set('to', str(edge['to_node']))
                 link.set('length', str(edge['length']))
                 link.set('freespeed', str(edge['freespeed']))
                 
