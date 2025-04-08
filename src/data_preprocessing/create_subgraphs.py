@@ -34,10 +34,15 @@ base_dir = os.getcwd()
 administrative_boundary_json_path = os.path.join(base_dir, "data", "output", "boundary_files", "Augsburg.json")
 matsim_network_file_path = os.path.join(base_dir, "data", "output", "simulation_data_per_city","augsburg", "augsburg_network.xml.gz")
 output_base_path = os.path.join(base_dir, "data", "output", "network_files")
-
+distribution_mean_factor =5 
+distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
 #Define variables
 hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
 capacity_tuning_factor = 0.5 #This is the factor by which the capacity of the links is reduced
+betweenness_centrality_cutoff = 0.8 # Take the lowest 80% of the links based on betweenness centrality
+closeness_centrality_cutoff = 0.8 # Take the highest 80% of the links based on closeness centrality
+distribution_mean_factor = 5
+distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
 
 #Define the path to the check output subgraph
 check_output_subgraph_path = os.path.join(base_dir, "data", "output", "network_files", "Augsburg", "networks", "networks_0", "network_residential_n7_s1.xml.gz")
@@ -144,7 +149,14 @@ def consolidate_road_types(highway_type):
         'tertiary': 'tertiary',
         'tertiary_link': 'tertiary',
         'residential': 'residential',
-        'unclassified': 'residential',
+        'unclassified': 'unclassified',
+        'living_street': 'living_street',
+        'pedestrian': 'other',
+        'service': 'other',
+        'track': 'other',
+        'path': 'other',
+        'cycleway': 'other',
+        
     }
     
     return road_type_mapping.get(highway_type, 'residential')
