@@ -504,7 +504,7 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
     )
     
     # Plot parent network edges (not in scenario)
-    parent_edges = matsim_network[~matsim_network['id'].isin(gdf_edges_with_hex[scenario_mask]['id'])]
+    parent_edges = matsim_network[~matsim_network['id'].isin(gdf_edges_with_hex[scenario_mask]['link'])]
     parent_edges.plot(ax=ax, 
                      color='gray',
                      linewidth=0.5,
@@ -512,7 +512,7 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
                      label='Parent Network')
     
     # Plot all scenario edges
-    scenario_edges = matsim_network[matsim_network['id'].isin(gdf_edges_with_hex[scenario_mask]['id'])]
+    scenario_edges = matsim_network[matsim_network['id'].isin(gdf_edges_with_hex[scenario_mask]['link'])]
     scenario_edges.plot(ax=ax, 
                        color='red',
                        linewidth=0.5,
