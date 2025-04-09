@@ -18,24 +18,23 @@ data/
 
 
 Folder structure for output data:
-data/subgraphs/
-├── hexagon_analysis/
-│   └── Augsburg/
-│       ├── plots/
-│       └── data/
-│
-├── centrality/
-│   └── Augsburg/
-│       ├── csv/
-│       └── plots/
-│
-└── network_files/
-    └── Augsburg/
-        ├── subgraphs/
-        │   └── augsburg_seed_1/
-        │       └── networks/
-        │           └── networks_0/
-        └── validation/
+data/
+└── subgraph_check/
+    ├── hexagon/
+    │   └── augsburg/
+    │       ├── plots/
+    │       └── data/
+    ├── centrality/
+    │   └── augsburg/
+    │       ├── csv/
+    │       └── plots/
+    └── network_files/
+        └── augsburg/
+            ├── subgraphs/
+            │   └── augsburg_seed_13/
+            │       └── networks/
+            │           └── networks_0/
+            └── validation/
 '''
 
 # Standard library imports
@@ -82,32 +81,30 @@ def setup_output_directories(base_dir, city_name, seed_number):
         seed_number: Seed number (e.g., 1)
     """
     # Keep the original base path
-    output_base_path = base_dir / "data"
+    output_base_path = base_dir / "data" / "subgraph_check"
     
     # Create city-specific seed directory name
     city_seed_dir = f"{city_name}_seed_{seed_number}"
     
     # Create specific output directories under output_base_path with city subdirectories
     output_paths = {
-        'hexagon': output_base_path / "hexagon_analysis" / city_name,
+        'hexagon': output_base_path / "hexagon" / city_name,
         'centrality': output_base_path / "centrality" / city_name,
-        'network_files': output_base_path / "network_files" / city_name
+        'network_files': output_base_path / "network_files" / city_name,
+        'networks': output_base_path / "network_files" / city_name / "subgraphs" / city_seed_dir / "networks" / "networks_0",
+        'validation': output_base_path / "network_files" / city_name / "validation"
     }
     
     # Create all directories and their subdirectories
     for path in output_paths.values():
         path.mkdir(parents=True, exist_ok=True)
         
-        if 'hexagon_analysis' in str(path):
+        if 'hexagon' in str(path):
             (path / "plots").mkdir(exist_ok=True)
             (path / "data").mkdir(exist_ok=True)
         elif 'centrality' in str(path):
             (path / "csv").mkdir(exist_ok=True)
             (path / "plots").mkdir(exist_ok=True)
-        elif 'network_files' in str(path):
-            (path / "validation").mkdir(exist_ok=True)
-            networks_path = path / "subgraphs" / city_seed_dir / "networks" / "networks_0"
-            networks_path.mkdir(parents=True, exist_ok=True)
     
     # Return complete path dictionary
     return {
@@ -117,8 +114,8 @@ def setup_output_directories(base_dir, city_name, seed_number):
         'centrality_csv': output_paths['centrality'] / "csv",
         'centrality_plots': output_paths['centrality'] / "plots",
         'network_files': output_paths['network_files'],
-        'networks': output_paths['network_files'] / "subgraphs" / city_seed_dir / "networks" / "networks_0",
-        'validation': output_paths['network_files'] / "validation"
+        'networks': output_paths['networks'],
+        'validation': output_paths['validation']
     }
     
 
@@ -202,8 +199,10 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     hexagon_ids = list(gdf_edges_with_hex['hexagon'].explode().dropna().unique())
     
     # Get unique road types (after consolidation)
-    road_types = gdf_edges_with_hex['consolidated_road_type'].unique()
-    road_types = [rt for rt in road_types if rt is not None]
+    target_road_types = ['trunk', 'primary', 'secondary', 'tertiary', 'residential', 'other']
+    road_types = [rt for rt in target_road_types if rt in gdf_edges_with_hex['consolidated_road_type'].unique()]
+    
+    print(f"\nProcessing road types: {road_types}")
     
     # Calculate target mean for subset size (overall)
     target_mean = len(hexagon_ids) / distribution_mean_factor
@@ -466,7 +465,7 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
     matsim_network, nodes_subgraph, edges_subgraph = matsim_network_input_to_gdf(check_output_subgraph_path)
     
     # Match the highway_consolidated column from gdf_edges_with_hex to matsim_network
-    highway_mapping = dict(zip(gdf_edges_with_hex['id'], gdf_edges_with_hex['consolidated_road_type']))
+    highway_mapping = dict(zip(gdf_edges_with_hex['link'], gdf_edges_with_hex['consolidated_road_type']))
     matsim_network['consolidated_road_type'] = matsim_network['id'].map(highway_mapping)
     
     fig, ax = plt.subplots(figsize=(15, 15))
