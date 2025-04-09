@@ -611,10 +611,10 @@ def cross_check_for_created_networks(check_output_subgraph_path, gdf_edges_with_
     
     # Create a comparison DataFrame for the capacity changes
     comparison_df = pd.DataFrame({
-        'edge_id': edges_in_selected_hexagon['id'],
+        'edge_id': edges_in_selected_hexagon['link'],
         'road_type': edges_in_selected_hexagon['consolidated_road_type'],
         'original_capacity': edges_in_selected_hexagon['capacity'],
-        'modified_capacity': matsim_network[matsim_network['id'].isin(edges_in_selected_hexagon['id'])]['capacity'],
+        'modified_capacity': matsim_network[matsim_network['id'].isin(edges_in_selected_hexagon['link'])]['capacity'],
         'capacity_reduced': edges_in_selected_hexagon['consolidated_road_type'] == key[0]
     })
     
