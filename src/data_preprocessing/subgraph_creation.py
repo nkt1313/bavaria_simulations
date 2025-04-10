@@ -417,8 +417,10 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 link.set('length', str(edge['length']))
                 link.set('freespeed', str(edge['freespeed']))
                 
-                # Adjust capacity if edge is in scenario hexagons
-                if edge['id'] in scenario_edges['id'].values:
+                # Adjust capacity if edge is in scenario hexagons AND centrality values are below cutoffs
+                if (edge['link'] in scenario_edges['link'].values and 
+                    edge['betweenness'] < betweenness_cutoff and 
+                    edge['closeness'] < closeness_cutoff):
                     capacity = float(edge['capacity']) * capacity_tuning_factor
                     link.set('capacity', str(capacity))
                     link.set('scenario_edge', 'true')  # Identifier for scenario edges
@@ -431,9 +433,9 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 link.set('modes', str(edge['modes']))
                 
                 # Add link attributes if they exist
-                if edge['id'] in link_attrs:
+                if edge['link'] in link_attrs:
                     attributes_elem = ET.SubElement(link, 'attributes')
-                    for attr_name, attr_value in link_attrs[edge['id']].items():
+                    for attr_name, attr_value in link_attrs[edge['link']].items():
                         attribute_elem = ET.SubElement(attributes_elem, 'attribute')
                         attribute_elem.set('name', attr_name)
                         # Set class based on the attribute name
