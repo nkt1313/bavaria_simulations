@@ -149,7 +149,7 @@ closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on c
 target_size = 20 #total number of subgraphs to be created
 distribution_mean_factor = 5
 distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
-seed_number = 13 #This is the seed number for the random number generator
+seed_number = 23 #This is the seed number for the random number generator
 ######## City Names #######################################################################################################
 city_name = 'augsburg'
 ########################################################################################################################
