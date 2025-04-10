@@ -67,7 +67,7 @@ from matplotlib.colors import Normalize
 
 # Local imports
 import network_io as nio
-from hexagon_creation_and_plot import matsim_network_input_to_gdf,clean_duplicates_based_on_modes,create_nodes_dict, multipolygon_to_polygon, modify_zones_geodataframe, merge_edges_and_zones, generate_hexagon_grid,merge_edges_and_hexagon_grid,consolidate_road_types, check_hexagon_statistics, plot_grid_and_edges,convert_and_save_geodataframe
+from hexagon_creation_and_plot import matsim_network_input_to_gdf,clean_duplicates_based_on_modes,create_nodes_dict, multipolygon_to_polygon, modify_geodataframe, merge_edges_and_zones, generate_hexagon_grid,merge_edges_and_hexagon_grid,consolidate_road_types, check_hexagon_statistics, plot_grid_and_edges,convert_and_save_geodataframe
 from betweenness_and_closeness import edge_closeness_centrality, analyze_centrality_measures,create_network_from_csv,verify_components
 
 def setup_output_directories(base_dir, city_name, seed_number):
@@ -679,7 +679,7 @@ def main():
     
     gdf = gpd.read_file(administrative_boundary_json_path)
     #modify the zones geodataframe
-    zones_gdf = modify_zones_geodataframe(gdf)
+    zones_gdf = modify_geodataframe(gdf)
     #merge the edges with the zones
     gdf_edges_with_zones = merge_edges_and_zones(cleaned_network, zones_gdf)
     #generate the hexagon grid for the polygon
