@@ -705,7 +705,11 @@ def main():
     #### Subgraph Creation ###############################################################################
     
     #generate the road type specific subsets
-    road_type_subsets = generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_number, target_size)
+    road_type_subsets = generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_number, target_size,
+                                                            distribution_mean_factor=distribution_mean_factor, 
+                                                            distribution_std_factor=distribution_std_factor,
+                                                            betweenness_centrality_cutoff=betweenness_centrality_cutoff,
+                                                            closeness_centrality_cutoff=closeness_centrality_cutoff)
     #generate the scenario labels
     #scenario_labels = generate_scenario_labels(road_type_subsets)
     #create the scenario networks and get the first scenario path
