@@ -367,12 +367,39 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             if first_scenario_path is None:
                 first_scenario_path = network_path
             
-            # Get edges in scenario hexagons (and the correct road type)
-            scenario_mask = gdf_edges_with_hex['hexagon'].apply(
-                lambda x: any(h in subset for h in x) if isinstance(x, list) else False
-            ) & (gdf_edges_with_hex['consolidated_road_type'] == road_type)
+            # Get edges in scenario hexagons (and the correct road type) with centrality conditions
+            scenario_mask = (
+                gdf_edges_with_hex['hexagon'].apply(
+                    lambda x: any(h in subset for h in x) if isinstance(x, list) else False
+                ) & 
+                (gdf_edges_with_hex['consolidated_road_type'] == road_type) &
+                (gdf_edges_with_hex['betweenness'] < betweenness_cutoff) &
+                (gdf_edges_with_hex['closeness'] > closeness_cutoff)
+            )
             
             scenario_edges = gdf_edges_with_hex[scenario_mask]
+            
+            edges_in_scenario_hexagons = gdf_edges_with_hex[    
+                (gdf_edges_with_hex['hexagon'].apply(
+                    lambda x: any(h in subset for h in x) if isinstance(x, list) else False
+                ))
+            ]
+            
+            # Get edges in hexagons for current road type
+            edges_in_road_type_hexagons = gdf_edges_with_hex[
+                (gdf_edges_with_hex['hexagon'].apply(
+                    lambda x: any(h in subset for h in x) if isinstance(x, list) else False
+                )) & 
+                (gdf_edges_with_hex['consolidated_road_type'] == road_type)
+            ]
+            
+            edges_with_reduced_capacity = len(scenario_edges)
+            
+            print(f"\nScenario {label} statistics:")
+            print(f"Total edges in scenario hexagons: {len(edges_in_scenario_hexagons)}")
+            print(f"Edges in hexagons for road type '{road_type}': {len(edges_in_road_type_hexagons)}")
+            print(f"Edges with reduced capacity: {edges_with_reduced_capacity}")
+            print(f"Percentage of edges with reduced capacity: {(edges_with_reduced_capacity/len(edges_in_road_type_hexagons))*100:.2f}%")
             
             # Create network XML structure
             root = ET.Element('network')
@@ -417,10 +444,8 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 link.set('length', str(edge['length']))
                 link.set('freespeed', str(edge['freespeed']))
                 
-                # Adjust capacity if edge is in scenario hexagons AND centrality values are below cutoffs
-                if (edge['link'] in scenario_edges['link'].values and 
-                    edge['betweenness'] < betweenness_cutoff and 
-                    edge['closeness'] < closeness_cutoff):
+                # Adjust capacity if edge is in scenario edges
+                if edge['link'] in scenario_edges['link'].values:
                     capacity = float(edge['capacity']) * capacity_tuning_factor
                     link.set('capacity', str(capacity))
                     link.set('scenario_edge', 'true')  # Identifier for scenario edges
@@ -695,7 +720,7 @@ def main():
     #generate the hexagon grid for the polygon
     gdf_edges_with_hex,hexagon_grid_all = merge_edges_and_hexagon_grid(zones_gdf, hexagon_size ,
                                                                       gdf_edges_with_zones ,
-                                                                      projection='EPSG:25832')
+                                                                              projection='EPSG:25832')
     #consolidate the road types
     gdf_edges_with_hex['consolidated_road_type'] = gdf_edges_with_hex['osm:way:highway'].apply(consolidate_road_types)
     #check the hexagon statistics
@@ -725,9 +750,9 @@ def main():
                                                     link_attrs=link_attrs,        
                                                     city_name=city_name, seed_number=seed_number, 
                                                     output_dirs=output_dirs, nodes_dict=nodes_dict, network_attrs=network_attrs,
-                                                 capacity_tuning_factor=capacity_tuning_factor,
-                                                 betweenness_centrality_cutoff=betweenness_centrality_cutoff,
-                                                    closeness_centrality_cutoff=closeness_centrality_cutoff)
+                             capacity_tuning_factor=capacity_tuning_factor,
+                             betweenness_centrality_cutoff=betweenness_centrality_cutoff,
+                             closeness_centrality_cutoff=closeness_centrality_cutoff)
     
     #### Check the created networks #######################################################################
     print(f"\nChecking first created scenario: {first_scenario.name}")
@@ -736,19 +761,19 @@ def main():
     matsim_network = plot_check_for_created_networks(
         check_output_subgraph_path=first_scenario,
         zones_gdf=zones_gdf,
-        hexagon_grid_all=hexagon_grid_all,
-        gdf_edges_with_hex=gdf_edges_with_hex,
-        scenario_labels=scenario_labels,
-        road_type_subsets=road_type_subsets,
+    hexagon_grid_all=hexagon_grid_all,
+    gdf_edges_with_hex=gdf_edges_with_hex,
+    scenario_labels=scenario_labels,
+    road_type_subsets=road_type_subsets,
         output_dirs=output_dirs
     )   
     
     #cross check the created networks
     edges_with_road_type, edges_in_hexagons, capacity_changes = cross_check_for_created_networks(
         check_output_subgraph_path=first_scenario,
-        gdf_edges_with_hex=gdf_edges_with_hex,
-        road_type_subsets=road_type_subsets,
-        scenario_labels=scenario_labels,
+    gdf_edges_with_hex=gdf_edges_with_hex,
+    road_type_subsets=road_type_subsets,
+    scenario_labels=scenario_labels,
         seed_number=seed_number
     )  
     
