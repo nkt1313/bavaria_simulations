@@ -106,11 +106,6 @@ def edge_closeness_centrality(G, centrality_weight='length'):
 
     # Calculate component sizes
     component_sizes = {node: len(component) for node, component in node_to_component.items()}
-    
-    print("\nComponent size distribution:")
-    size_distribution = Counter(component_sizes.values())
-    for size, count in sorted(size_distribution.items()):
-        print(f"Components of size {size}: {count}")
 
     print("\nCalculating edge centrality...")
     total_edges = G.number_of_edges()
@@ -179,18 +174,19 @@ def edge_closeness_centrality(G, centrality_weight='length'):
     return edge_closeness
 
 
-def plot_centrality_measures(gdf_edges_with_hex, centrality_df, output_dir):
+def plot_centrality_measures(gdf_edges_with_hex, centrality_df, output_dirs, city_name):
     ''' 
     This function plots and saves the betweenness and closeness centrality distributions
     input:
         gdf_edges_with_hex: GeoDataFrame containing the network edges
         centrality_df: DataFrame containing the centrality measures
-        output_dir: Directory to save the plots
+        output_dirs: Dictionary containing the output directories
+        city_name: Name of the city being processed
     '''
 
-    # Create output directory if it doesn't exist
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Get the centrality plots directory from output_dirs
+    centrality_plots_dir = output_dirs['centrality_plots']
+    centrality_plots_dir.mkdir(parents=True, exist_ok=True)
 
     # Create a figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
@@ -201,11 +197,18 @@ def plot_centrality_measures(gdf_edges_with_hex, centrality_df, output_dir):
     ax1.set_xlabel('Betweenness Centrality')
     ax1.set_ylabel('Count')
 
-    # Plot closeness distribution
-    sns.histplot(data=centrality_df, x='closeness', ax=ax2, bins=50)
+    # Calculate closeness bins based on actual data range
+    min_closeness = centrality_df['closeness'].min()
+    max_closeness = centrality_df['closeness'].max()
+    bin_width = 0.000005
+    closeness_bins = np.arange(min_closeness, max_closeness + bin_width, bin_width)
+
+    # Plot closeness distribution with dynamic range
+    sns.histplot(data=centrality_df, x='closeness', ax=ax2, bins=closeness_bins)
     ax2.set_title('Closeness Centrality Distribution')
     ax2.set_xlabel('Closeness Centrality')
     ax2.set_ylabel('Count')
+    ax2.set_xlim(min_closeness, max_closeness)
 
     # Add some statistics
     print("\nBetweenness Centrality Statistics:")
@@ -213,9 +216,9 @@ def plot_centrality_measures(gdf_edges_with_hex, centrality_df, output_dir):
     print("\nCloseness Centrality Statistics:")
     print(centrality_df['closeness'].describe())
 
-    # Save the plot
+    # Save the combined plot
     plt.tight_layout()
-    plot_path = output_dir / 'centrality_distributions.png'
+    plot_path = centrality_plots_dir / f'{city_name}_centrality_distributions.png'
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"\nSaved centrality distributions plot to: {plot_path}")
     plt.close()  # Close the figure to free memory
@@ -228,18 +231,19 @@ def plot_centrality_measures(gdf_edges_with_hex, centrality_df, output_dir):
     plt.xlabel('Betweenness Centrality')
     plt.ylabel('Count')
     plt.tight_layout()
-    betweenness_path = output_dir / 'betweenness_distribution.png'
+    betweenness_path = centrality_plots_dir / f'{city_name}_betweenness_distribution.png'
     plt.savefig(betweenness_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-    # Closeness plot
+    # Closeness plot with dynamic range
     plt.figure(figsize=(10, 6))
-    sns.histplot(data=centrality_df, x='closeness', bins=50)
+    sns.histplot(data=centrality_df, x='closeness', bins=closeness_bins)
     plt.title('Closeness Centrality Distribution')
     plt.xlabel('Closeness Centrality')
     plt.ylabel('Count')
+    plt.xlim(min_closeness, max_closeness)
     plt.tight_layout()
-    closeness_path = output_dir / 'closeness_distribution.png'
+    closeness_path = centrality_plots_dir / f'{city_name}_closeness_distribution.png'
     plt.savefig(closeness_path, dpi=300, bbox_inches='tight')
     plt.close()
 
