@@ -193,17 +193,16 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     # Set the seed for reproducibility using the seed_number from directory structure
     np.random.seed(seed_number)
     random.seed(seed_number)
-    
-    # Calculate the 80th percentile for closeness centrality
-    closeness_cutoff = gdf_edges_with_hex['closeness'].quantile(closeness_centrality_cutoff)
-    betweenness_cutoff = gdf_edges_with_hex['betweenness'].quantile(betweenness_centrality_cutoff)
+    gdf_filtered = gdf_edges_with_hex[gdf_edges_with_hex['is_in_stadt'] == 1].copy()
+    closeness_cutoff = gdf_filtered['closeness'].quantile(closeness_centrality_cutoff)
+    betweenness_cutoff = gdf_filtered['betweenness'].quantile(betweenness_centrality_cutoff)
     print(f"Betweenness centrality cutoff (80th percentile): {betweenness_cutoff}")
     print(f"Closeness centrality cutoff (80th percentile): {closeness_cutoff}")
     
     # Analyze hexagons per road type for edges meeting centrality criteria
     print("\nAnalyzing hexagons per road type for edges meeting centrality criteria:")
-    centrality_mask = (gdf_edges_with_hex['betweenness'] < betweenness_cutoff) & (gdf_edges_with_hex['closeness'] > closeness_cutoff)
-    edges_meeting_criteria = gdf_edges_with_hex[centrality_mask]
+    centrality_mask = (gdf_filtered['betweenness'] < betweenness_cutoff) & (gdf_filtered['closeness'] > closeness_cutoff)
+    edges_meeting_criteria = gdf_filtered[centrality_mask]
     
     # Create a dictionary to store hexagon counts per road type
     hexagons_per_road_type = {}
