@@ -67,7 +67,7 @@ from matplotlib.colors import Normalize
 
 # Local imports
 import network_io as nio
-from hexagon_creation_and_plot import matsim_network_input_to_gdf,clean_duplicates_based_on_modes,create_nodes_dict, multipolygon_to_polygon, modify_districts_geodataframe, merge_edges_with_districts, generate_hexagon_grid_for_districts,consolidate_road_types, check_hexagon_statistics, plot_grid_and_edges,convert_and_save_geodataframe
+from hexagon_creation_and_plot import matsim_network_input_to_gdf,clean_duplicates_based_on_modes,create_nodes_dict, multipolygon_to_polygon, modify_zones_geodataframe, merge_edges_and_zones, generate_hexagon_grid,merge_edges_and_hexagon_grid,consolidate_road_types, check_hexagon_statistics, plot_grid_and_edges,convert_and_save_geodataframe
 from betweenness_and_closeness import edge_closeness_centrality, analyze_centrality_measures,create_network_from_csv,verify_components
 
 def setup_output_directories(base_dir, city_name, seed_number):
@@ -140,8 +140,8 @@ output_base_path = base_dir / "data"/ "subgraphs"
 
 hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
 capacity_tuning_factor = 0.5 #This is the factor by which the capacity of the links is reduced
-betweenness_centrality_cutoff = 0 # Take the lowest 80% of the links based on betweenness centrality
-closeness_centrality_cutoff = 0 # Take the highest 80% of the links based on closeness centrality
+betweenness_centrality_cutoff = 0.8 # Take the lowest 80% of the links based on betweenness centrality
+closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on closeness centrality
 target_size = 100 #total number of subgraphs to be created
 distribution_mean_factor = 5
 distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
@@ -160,8 +160,7 @@ csv_output = output_dirs['centrality_csv'] / 'centrality_measures.csv'
 # For networks (with city-specific seed hierarchy)
 subgraph_output = output_dirs['networks'] / f'{city_name}_network_residential_n7_s1.xml.gz'
 
-#check output subgraph
-check_output_subgraph_path = output_dirs['networks'] / f'{city_name}_network_residential_n7_s1.xml.gz'
+
 ########################################################################################################################
 def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_number, target_size, 
                                         distribution_mean_factor=distribution_mean_factor, 
@@ -193,20 +192,49 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     np.random.seed(seed_number)
     random.seed(seed_number)
     
-    print(f"\nGenerating subsets for {city_name} with seed {seed_number}")
+    # Calculate the 80th percentile for closeness centrality
+    closeness_cutoff = gdf_edges_with_hex['closeness'].quantile(closeness_centrality_cutoff)
+    betweenness_cutoff = gdf_edges_with_hex['betweenness'].quantile(betweenness_centrality_cutoff)
+    print(f"Betweenness centrality cutoff (80th percentile): {betweenness_cutoff}")
+    print(f"Closeness centrality cutoff (80th percentile): {closeness_cutoff}")
     
-    # Get unique hexagon IDs containing edges and convert to list
-    hexagon_ids = list(gdf_edges_with_hex['hexagon'].explode().dropna().unique())
+    # Analyze hexagons per road type for edges meeting centrality criteria
+    print("\nAnalyzing hexagons per road type for edges meeting centrality criteria:")
+    centrality_mask = (gdf_edges_with_hex['betweenness'] < betweenness_cutoff) & (gdf_edges_with_hex['closeness'] > closeness_cutoff)
+    edges_meeting_criteria = gdf_edges_with_hex[centrality_mask]
     
-    # Get unique road types (after consolidation)
+    # Create a dictionary to store hexagon counts per road type
+    hexagons_per_road_type = {}
+    
     target_road_types = ['trunk', 'primary', 'secondary', 'tertiary', 'residential', 'other']
-    road_types = [rt for rt in target_road_types if rt in gdf_edges_with_hex['consolidated_road_type'].unique()]
+    road_types = [rt for rt in target_road_types if rt in edges_meeting_criteria['consolidated_road_type'].unique()]
     
-    print(f"\nProcessing road types: {road_types}")
+    # First, collect all hexagons for each road type
+    road_type_hexagons = {}
+    for road_type in road_types:
+        # Get edges of this road type
+        road_type_edges = edges_meeting_criteria[edges_meeting_criteria['consolidated_road_type'] == road_type]
+        
+        # Get all unique hexagons for this road type
+        hexagons = set()
+        for hex_list in road_type_edges['hexagon']:
+            if isinstance(hex_list, list):
+                hexagons.update(hex_list)
+        
+        # Store the hexagons for this road type
+        road_type_hexagons[road_type] = sorted(list(hexagons))
+        
+        # Store the count
+        hexagons_per_road_type[road_type] = len(hexagons)
+        
+        # Print the results
+        print(f"Road type: {road_type}")
+        print(f"Number of edges meeting criteria: {len(road_type_edges)}")
+        print(f"Number of unique hexagons: {len(hexagons)}")
+        print(f'Unique hexagons: {hexagons}')
+        print("-" * 50)
     
-    # Calculate target mean for subset size (overall)
-    target_mean = len(hexagon_ids) / distribution_mean_factor
-    std_dev = len(hexagon_ids) / distribution_std_factor
+    print(f"\nGenerating subsets for {city_name} with seed {seed_number}")
     
     # Calculate number of subsets per road type
     subsets_per_type = target_size // len(road_types)
@@ -215,20 +243,31 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     road_type_subsets = {}
     
     for road_type in road_types:
-        print(f"Generating subsets for road type: {road_type}")
+        print(f"\nGenerating subsets for road type: {road_type}")
+        print(f"Available hexagons: {road_type_hexagons[road_type]}")
+        
+        # Get the hexagons for this road type
+        available_hexagons = road_type_hexagons[road_type]
+        
+        # Calculate target mean for subset size (specific to this road type)
+        target_mean = len(available_hexagons) / distribution_mean_factor
+        std_dev = len(available_hexagons) / distribution_std_factor
+        
         # Generate subsets for this road type
         unique_subsets = set()
         
         while len(unique_subsets) < subsets_per_type:
             # Sample subset size from normal distribution
             subset_size = max(1, int(np.random.normal(target_mean, std_dev)))
-            subset_size = min(subset_size, len(hexagon_ids))
+            subset_size = min(subset_size, len(available_hexagons))
             
-            # Randomly choose subset_size hexagons and sort them
-            subset = tuple(sorted(random.sample(hexagon_ids, subset_size)))
+            # Randomly choose subset_size hexagons from available hexagons for this road type
+            subset = tuple(sorted(random.sample(available_hexagons, subset_size)))
             unique_subsets.add(subset)
         
         road_type_subsets[road_type] = list(unique_subsets)
+        print(f"Generated {len(unique_subsets)} unique subsets for {road_type}")
+        print(f"Average subset size: {np.mean([len(s) for s in unique_subsets]):.2f}")
     
     # Calculate overall statistics
     all_subsets = [subset for subsets in road_type_subsets.values() for subset in subsets]
@@ -236,7 +275,6 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     
     print(f"\nSubset Generation Summary for {city_name}:")
     print(f"Total number of subsets: {len(all_subsets)}")
-    print(f"Target mean subset length: {target_mean:.2f}")
     print(f"Actual mean subset length: {overall_mean:.2f}")
     print(f"Number of road types: {len(road_types)}")
     print(f"Subsets per road type: {subsets_per_type}")
@@ -322,6 +360,12 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
     print(f"\nCreating scenario networks for {city_name} (seed {seed_number})")
     print(f"Output directory: {seed_dir}")
     
+    # Calculate the 80th percentile for closeness centrality
+    closeness_cutoff = gdf_edges_with_hex['closeness'].quantile(closeness_centrality_cutoff)
+    betweenness_cutoff = gdf_edges_with_hex['betweenness'].quantile(betweenness_centrality_cutoff)
+    print(f"Betweenness centrality cutoff (80th percentile): {betweenness_cutoff}")
+    print(f"Closeness centrality cutoff (80th percentile): {closeness_cutoff}")
+    
     # Counter for total scenarios
     total_scenarios = 0
     first_scenario_path = None
@@ -357,15 +401,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             # Create network XML structure
             root = ET.Element('network')
             
-            # Add metadata about the scenario
-            metadata = ET.SubElement(root, 'metadata')
-            metadata.set('city', city_name)
-            metadata.set('seed', str(seed_number))
-            metadata.set('road_type', road_type)
-            metadata.set('scenario_number', str(i+1))
-            metadata.set('hexagon_count', str(len(subset)))
-            
-            # Add all nodes from the parent network
+            # Add all nodes from the parent network in sorted order
             nodes = ET.SubElement(root, 'nodes')
             node_ids = set()
             for _, edge in gdf_edges_with_hex.iterrows():
@@ -393,10 +429,10 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 link.set('length', str(edge['length']))
                 link.set('freespeed', str(edge['freespeed']))
                 
-                # Adjust capacity if edge is in scenario hexagons
+                # Adjust capacity if edge is in scenario hexagons and meets centrality criteria
                 if (edge['link'] in scenario_edges['link'].values and
-                    edge['betweenness'] <= betweenness_centrality_cutoff and 
-                    edge['closeness'] <= closeness_centrality_cutoff):
+                    edge['betweenness'] < betweenness_cutoff and 
+                    edge['closeness'] > closeness_cutoff):  # Using calculated cutoff
                     capacity = float(edge['capacity']) * capacity_tuning_factor
                     link.set('capacity', str(capacity))
                     link.set('scenario_edge', 'true')  # Identifier for scenario edges
@@ -410,7 +446,10 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             tree = ET.ElementTree(root)
             
             # Create the XML string with proper declaration
-            xml_declaration = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE network SYSTEM "http://www.matsim.org/files/dtd/network_v2.dtd">\n'
+            xml_declaration = (
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<!DOCTYPE network SYSTEM "http://www.matsim.org/files/dtd/network_v2.dtd">\n'
+            )
             xml_str = xml_declaration + ET.tostring(root, encoding='unicode')
             
             # Ensure the directory exists
@@ -436,6 +475,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
     print(f"Files are organized in folders under: {seed_dir}")
     
     return first_scenario_path
+
 
 
 def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, hexagon_grid_all, 
@@ -638,20 +678,20 @@ def main():
     nodes_dict = create_nodes_dict(cleaned_network)
     
     gdf = gpd.read_file(administrative_boundary_json_path)
-    #modify the districts geodataframe
-    districts_gdf = modify_districts_geodataframe(gdf)
-    #merge the edges with the districts
-    gdf_edges_with_districts = merge_edges_with_districts(cleaned_network, districts_gdf)
+    #modify the zones geodataframe
+    zones_gdf = modify_zones_geodataframe(gdf)
+    #merge the edges with the zones
+    gdf_edges_with_zones = merge_edges_and_zones(cleaned_network, zones_gdf)
     #generate the hexagon grid for the polygon
-    gdf_edges_with_hex,hexagon_grid_all = generate_hexagon_grid_for_districts(districts_gdf, hexagon_size ,
-                                                                              gdf_edges_with_districts ,
-                                                                              projection='EPSG:25832')
+    gdf_edges_with_hex,hexagon_grid_all = merge_edges_and_hexagon_grid(zones_gdf, hexagon_size ,
+                                                                      gdf_edges_with_zones ,
+                                                                      projection='EPSG:25832')
     #consolidate the road types
     gdf_edges_with_hex['consolidated_road_type'] = gdf_edges_with_hex['osm:way:highway'].apply(consolidate_road_types)
     #check the hexagon statistics
     check_hexagon_statistics(gdf_edges_with_hex, hexagon_grid_all)
     #plot the grid and the edges
-    plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all,districts_gdf,output_dirs,city_name)
+    plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all,zones_gdf,output_dirs,city_name)
     # Save the GeoDataFrame using the new function
     convert_and_save_geodataframe(gdf_edges_with_hex, output_dirs['hexagon_data'] / f'{city_name}_hexagon_edges.geojson')
     
@@ -665,41 +705,41 @@ def main():
     #generate the road type specific subsets
     road_type_subsets = generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_number, target_size)
     #generate the scenario labels
-    scenario_labels = generate_scenario_labels(road_type_subsets)
+    #scenario_labels = generate_scenario_labels(road_type_subsets)
     #create the scenario networks and get the first scenario path
-    first_scenario = create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
-                             city_name=city_name, seed_number=seed_number, 
-                             output_dirs=output_dirs, nodes_dict=nodes_dict,
-                             capacity_tuning_factor=capacity_tuning_factor,
-                             betweenness_centrality_cutoff=betweenness_centrality_cutoff,
-                             closeness_centrality_cutoff=closeness_centrality_cutoff)
+    #first_scenario = create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
+    #                             city_name=city_name, seed_number=seed_number, 
+    #                             output_dirs=output_dirs, nodes_dict=nodes_dict,
+    #                             capacity_tuning_factor=capacity_tuning_factor,
+    #                             betweenness_centrality_cutoff=betweenness_centrality_cutoff,
+    #                         closeness_centrality_cutoff=closeness_centrality_cutoff)
     
     #### Check the created networks #######################################################################
-    print(f"\nChecking first created scenario: {first_scenario.name}")
+    #print(f"\nChecking first created scenario: {first_scenario.name}")
     
     #plot the check for the created networks
-    matsim_network = plot_check_for_created_networks(
-        check_output_subgraph_path=first_scenario,
-        districts_gdf=districts_gdf,
-        hexagon_grid_all=hexagon_grid_all,
-        gdf_edges_with_hex=gdf_edges_with_hex,
-        scenario_labels=scenario_labels,
-        road_type_subsets=road_type_subsets,
-        output_dirs=output_dirs
-    )   
+    #matsim_network = plot_check_for_created_networks(
+    #    check_output_subgraph_path=first_scenario,
+    #    zones_gdf=zones_gdf,
+    #    hexagon_grid_all=hexagon_grid_all,
+    #    gdf_edges_with_hex=gdf_edges_with_hex,
+    #    scenario_labels=scenario_labels,
+    #    road_type_subsets=road_type_subsets,
+    #   output_dirs=output_dirs
+    #)   
     
     #cross check the created networks
-    edges_with_road_type, edges_in_hexagons, capacity_changes = cross_check_for_created_networks(
-        check_output_subgraph_path=first_scenario,
-        gdf_edges_with_hex=gdf_edges_with_hex,
-        road_type_subsets=road_type_subsets,
-        scenario_labels=scenario_labels,
-        seed_number=seed_number
-    )  
+    #edges_with_road_type, edges_in_hexagons, capacity_changes = cross_check_for_created_networks(
+    #    check_output_subgraph_path=first_scenario,
+    #    gdf_edges_with_hex=gdf_edges_with_hex,
+    #    road_type_subsets=road_type_subsets,
+    #    scenario_labels=scenario_labels,
+    #    seed_number=seed_number
+    #)  
     
-    edges_with_road_type
-    edges_in_hexagons
-    capacity_changes
+    #edges_with_road_type
+    #edges_in_hexagons
+    #capacity_changes
     
 if __name__ == "__main__":
     main()
