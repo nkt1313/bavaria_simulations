@@ -324,33 +324,6 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
     """
     Create network.xml.gz files for each scenario, organized in folders of 1,000 files.
     Includes all edges from parent network but adjusts capacities for edges in scenario hexagons.
-    
-    Parameters:
-    -----------
-    matsim_network : GeoDataFrame
-        Original MATSim network data
-    gdf_edges_with_hex : GeoDataFrame
-        Network data with hexagon assignments
-    road_type_subsets : dict
-        Dictionary mapping road types to their hexagon subsets
-    scenario_labels : dict
-        Dictionary mapping scenario indices to their labels
-    city_name : str
-        Name of the city (e.g., 'augsburg')
-    seed_number : int
-        Seed number from city_seed_X directory structure
-    output_dirs : dict
-        Dictionary containing output directory paths
-    nodes_dict : dict
-        Dictionary containing node coordinates
-    network_attrs : dict
-        Dictionary containing network attributes from input file
-    capacity_tuning_factor : float, optional
-        Factor to adjust capacity for scenario edges (default: 0.5)
-    betweenness_centrality_cutoff : float, optional
-        Cutoff for betweenness centrality (default: 0.8)
-    closeness_centrality_cutoff : float, optional
-        Cutoff for closeness centrality (default: 0.2)
     """
     # Get the networks directory from output_dirs
     networks_base = output_dirs['networks']
@@ -363,14 +336,25 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
     print(f"Output directory: {seed_dir}")
     
     # Calculate the 80th percentile for closeness centrality
-    closeness_cutoff = gdf_edges_with_hex['closeness'].quantile(closeness_centrality_cutoff)
-    betweenness_cutoff = gdf_edges_with_hex['betweenness'].quantile(betweenness_centrality_cutoff)
+    gdf_filtered = gdf_edges_with_hex[gdf_edges_with_hex['is_in_stadt'] == 1].copy()
+    closeness_cutoff = gdf_filtered['closeness'].quantile(closeness_centrality_cutoff)
+    betweenness_cutoff = gdf_filtered['betweenness'].quantile(betweenness_centrality_cutoff)
     print(f"Betweenness centrality cutoff (80th percentile): {betweenness_cutoff}")
     print(f"Closeness centrality cutoff (80th percentile): {closeness_cutoff}")
     
     # Counter for total scenarios
     total_scenarios = 0
     first_scenario_path = None
+    
+    # Pre-calculate scenario masks for all road types and subsets
+    scenario_masks = {}
+    for road_type, subsets in road_type_subsets.items():
+        scenario_masks[road_type] = []
+        for subset in subsets:
+            mask = gdf_edges_with_hex['hexagon'].apply(
+                lambda x: any(h in subset for h in x) if isinstance(x, list) else False
+            ) & (gdf_edges_with_hex['consolidated_road_type'] == road_type)
+            scenario_masks[road_type].append(mask)
     
     # Process each road type and its scenarios
     for road_type, subsets in road_type_subsets.items():
@@ -393,12 +377,8 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
             if first_scenario_path is None:
                 first_scenario_path = network_path
             
-            # Get edges in scenario hexagons (and the correct road type)
-            scenario_mask = gdf_edges_with_hex['hexagon'].apply(
-                lambda x: any(h in subset for h in x) if isinstance(x, list) else False
-            ) & (gdf_edges_with_hex['consolidated_road_type'] == road_type)
-            
-            scenario_edges = gdf_edges_with_hex[scenario_mask]
+            # Get edges in scenario hexagons using pre-calculated mask
+            scenario_edges = gdf_edges_with_hex[scenario_masks[road_type][i]]
             
             # Create network XML structure
             root = ET.Element('network')
@@ -409,7 +389,13 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
             attribute.set('name', 'coordinateReferenceSystem')
             attribute.set('class', 'java.lang.String')
             attribute.text = network_attrs.get('coordinateReferenceSystem', 'Atlantis')
-    
+            
+            # Add links element with attributes from input file
+            links = ET.SubElement(root, 'links')
+            links.set('capperiod', network_attrs.get('capperiod', '01:00:00'))
+            links.set('effectivecellsize', network_attrs.get('effectivecellsize', '7.5'))
+            links.set('effectivelanewidth', network_attrs.get('effectivelanewidth', '3.75'))
+            
             # Add all nodes from the parent network in sorted order
             nodes = ET.SubElement(root, 'nodes')
             node_ids = set()
@@ -417,7 +403,7 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
                 node_ids.add(edge['from_node'])
                 node_ids.add(edge['to_node'])
             
-            for node_id in node_ids:
+            for node_id in sorted(node_ids):
                 node = ET.SubElement(nodes, 'node')
                 node.set('id', str(node_id))
                 if node_id in nodes_dict:
@@ -428,11 +414,6 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
                     print(f"Warning: Node {node_id} not found in nodes_dict")
                     continue
             
-            # Add links element with attributes from input file
-            links = ET.SubElement(root, 'links')
-            links.set('capperiod', network_attrs.get('capperiod'))
-            links.set('effectivecellsize', network_attrs.get('effectivecellsize'))
-            links.set('effectivelanewidth', network_attrs.get('effectivelanewidth'))
             # Add all links with adjusted capacities for scenario edges
             for _, edge in gdf_edges_with_hex.iterrows():
                 # Find matching link in matsim_network
@@ -463,9 +444,6 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
             )
             xml_str = xml_declaration + ET.tostring(root, encoding='unicode')
             
-            # Ensure the directory exists
-            folder_path.mkdir(parents=True, exist_ok=True)
-            
             # Save as gzipped XML
             with gzip.open(network_path, 'wb') as f:
                 f.write(xml_str.encode('utf-8'))
@@ -478,8 +456,8 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
             
             total_scenarios += 1
             
-            # Print progress
-            if total_scenarios % 10 == 0:  # Changed from 100 to 10 for more frequent updates
+            # Print progress more frequently
+            if total_scenarios % 5 == 0:  # Print progress every 5 scenarios
                 print(f"Created {total_scenarios} network files...")
     
     print(f"\nFinished creating {total_scenarios} network files for {city_name} (seed {seed_number})")
