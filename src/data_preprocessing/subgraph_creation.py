@@ -516,7 +516,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
 
 
 
-def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, hexagon_grid_all, 
+def plot_check_for_created_networks(check_output_subgraph_path, zones_gdf, hexagon_grid_all, 
                                     gdf_edges_with_hex, scenario_labels, road_type_subsets, output_dirs=None):
     """
     Plot and verify a single created network file by visualizing its scenario edges, road types, and hexagons.
@@ -526,8 +526,8 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
     -----------
     check_output_subgraph_path : Path or str
         Path to the specific network file to check
-    districts_gdf : GeoDataFrame
-        GeoDataFrame containing district boundaries
+    zones_gdf : GeoDataFrame
+        GeoDataFrame containing zone boundaries
     hexagon_grid_all : GeoDataFrame
         GeoDataFrame containing all hexagons
     gdf_edges_with_hex : GeoDataFrame
@@ -549,7 +549,7 @@ def plot_check_for_created_networks(check_output_subgraph_path, districts_gdf, h
     fig, ax = plt.subplots(figsize=(15, 15))
     
     # Plot the districts
-    districts_gdf.plot(ax=ax, 
+    zones_gdf.plot(ax=ax, 
                       column='zone_id',
                       cmap='YlGnBu',
                       alpha=0.3,
@@ -773,19 +773,19 @@ def main():
     matsim_network = plot_check_for_created_networks(
         check_output_subgraph_path=first_scenario,
         zones_gdf=zones_gdf,
-    hexagon_grid_all=hexagon_grid_all,
-    gdf_edges_with_hex=gdf_edges_with_hex,
-    scenario_labels=scenario_labels,
-    road_type_subsets=road_type_subsets,
+        hexagon_grid_all=hexagon_grid_all,
+        gdf_edges_with_hex=gdf_edges_with_hex,
+        scenario_labels=scenario_labels,
+        road_type_subsets=road_type_subsets,
         output_dirs=output_dirs
     )   
     
     #cross check the created networks
     edges_with_road_type, edges_in_hexagons, capacity_changes = cross_check_for_created_networks(
         check_output_subgraph_path=first_scenario,
-    gdf_edges_with_hex=gdf_edges_with_hex,
-    road_type_subsets=road_type_subsets,
-    scenario_labels=scenario_labels,
+        gdf_edges_with_hex=gdf_edges_with_hex,
+        road_type_subsets=road_type_subsets,
+        scenario_labels=scenario_labels,
         seed_number=seed_number
     )  
     
