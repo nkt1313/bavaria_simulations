@@ -164,7 +164,9 @@ subgraph_output = output_dirs['networks'] / f'{city_name}_network_residential_n7
 ########################################################################################################################
 def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_number, target_size, 
                                         distribution_mean_factor=distribution_mean_factor, 
-                                        distribution_std_factor=distribution_std_factor):
+                                        distribution_std_factor=distribution_std_factor,
+                                        betweenness_centrality_cutoff=betweenness_centrality_cutoff,
+                                        closeness_centrality_cutoff=closeness_centrality_cutoff):
     """
     Generate unique subsets of hexagon IDs for each road type, where the total number of subsets
     is target_size, distributed evenly across road types.
