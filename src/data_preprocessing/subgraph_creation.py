@@ -142,7 +142,7 @@ output_base_path = base_dir / "data"/ "subgraphs"
 
 ######## Control Center for Variables #################################################################################
 
-hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
+hexagon_size = 1000  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
 capacity_tuning_factor = 0.5 #This is the factor by which the capacity of the links is reduced
 betweenness_centrality_cutoff = 0.8 # Take the lowest 80% of the links based on betweenness centrality
 closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on closeness centrality
@@ -243,25 +243,32 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     
     # Calculate number of subsets per road type
     subsets_per_type = target_size // len(road_types)
-    # Get unique hexagon IDs from all road types
-    hexagon_ids = list(set(hex_id for hex_list in road_type_hexagons.values() for hex_id in hex_list))
+    
     # Dictionary to store subsets for each road type
     road_type_subsets = {}
-    target_mean = len(hexagon_ids) / distribution_mean_factor
-    std_dev = len(hexagon_ids) / distribution_std_factor
     
     for road_type in road_types:
         print(f"Generating subsets for road type: {road_type}")
+        # Get hexagons that contain this road type
+        road_type_hexagons_list = road_type_hexagons[road_type]
+        if not road_type_hexagons_list:
+            print(f"Warning: No hexagons found for road type {road_type}")
+            continue
+            
+        # Calculate target mean and std dev based on this road type's hexagons
+        target_mean = len(road_type_hexagons_list) / distribution_mean_factor
+        std_dev = len(road_type_hexagons_list) / distribution_std_factor
+        
         # Generate subsets for this road type
         unique_subsets = set()
         
         while len(unique_subsets) < subsets_per_type:
             # Sample subset size from normal distribution
             subset_size = max(1, int(np.random.normal(target_mean, std_dev)))
-            subset_size = min(subset_size, len(hexagon_ids))
+            subset_size = min(subset_size, len(road_type_hexagons_list))
             
-            # Randomly choose subset_size hexagons and sort them
-            subset = tuple(sorted(random.sample(hexagon_ids, subset_size)))
+            # Randomly choose subset_size hexagons from this road type's hexagons
+            subset = tuple(sorted(random.sample(road_type_hexagons_list, subset_size)))
             unique_subsets.add(subset)
         
         road_type_subsets[road_type] = list(unique_subsets)
@@ -399,7 +406,12 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             print(f"Total edges in scenario hexagons: {len(edges_in_scenario_hexagons)}")
             print(f"Edges in hexagons for road type '{road_type}': {len(edges_in_road_type_hexagons)}")
             print(f"Edges with reduced capacity: {edges_with_reduced_capacity}")
-            print(f"Percentage of edges with reduced capacity: {(edges_with_reduced_capacity/len(edges_in_road_type_hexagons))*100:.2f}%")
+            
+            # Only calculate percentage if there are edges of this road type in the hexagons
+            if len(edges_in_road_type_hexagons) > 0:
+                print(f"Percentage of edges with reduced capacity: {(edges_with_reduced_capacity/len(edges_in_road_type_hexagons))*100:.2f}%")
+            else:
+                print("No edges of this road type in the selected hexagons")
             
             # Create network XML structure
             root = ET.Element('network')
