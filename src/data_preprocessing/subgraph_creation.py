@@ -243,8 +243,8 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     
     # Calculate number of subsets per road type
     subsets_per_type = target_size // len(road_types)
-    # Flatten the list of lists from road_type_hexagons.values()
-    hexagon_ids = [hex_id for hex_list in road_type_hexagons.values() for hex_id in hex_list]
+    # Get unique hexagon IDs from all road types
+    hexagon_ids = list(set(hex_id for hex_list in road_type_hexagons.values() for hex_id in hex_list))
     # Dictionary to store subsets for each road type
     road_type_subsets = {}
     target_mean = len(hexagon_ids) / distribution_mean_factor
