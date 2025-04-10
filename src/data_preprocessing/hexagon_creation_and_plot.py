@@ -274,44 +274,47 @@ def consolidate_road_types(highway_type):
     return road_type_mapping.get(highway_type, 'other')
 
 
-def modify_districts_geodataframe(gdf):
+def modify_geodataframe(gdf):
     '''
-    This function modifies the districts geodataframe to ensure it is in the correct CRS 
-    and has the correct columns
+    This function modifies the zones geodataframe to ensure it is in the correct CRS 
+    and has the correct columns. 
+    Also it applies the 'multipolygon_to_polygon' function to all the geometries in the geodataframe so that 
+    the geometries are all Polygons and not MultiPolygons.
     '''
     if (gdf.geometry.apply(lambda x: x.geom_type == "MultiPolygon")).any():
         gdf["geometry"] = gdf.geometry.apply(multipolygon_to_polygon)
     gdf["area"] = gdf.geometry.area
     gdf["perimetre"] = gdf.geometry.length
     gdf["zone_id"] = range(1, len(gdf)+1) #zone id
-    districts_gdf = gdf[["zone_id", "area", "perimetre", "geometry"]]
+    zones_gdf = gdf[["zone_id", "area", "perimetre", "geometry"]]
     # Ensure the data is in the correct CRS (EPSG:25832) **********VERY IMPORTANT**********
-    if districts_gdf.crs != "EPSG:25832": #should match with the CRS of the Network Geodataframe
-        districts_gdf = districts_gdf.to_crs(epsg=25832)
-    return districts_gdf
+    if zones_gdf.crs != "EPSG:25832": #should match with the CRS of the Network Geodataframe
+        zones_gdf = zones_gdf.to_crs(epsg=25832)
+    return zones_gdf
 
 
 def multipolygon_to_polygon(geom):
     '''
-    This function converts a MultiPolygon to a Polygon with the largest area.
+    This function converts a MultiPolygon to a Polygon with the largest connected area.
+    A MultiPolygon with 2 Polygons inside will return the Polygon with the largest area.(z.B. Stadt Bamberg had 2 disconnected polygons, we only consider the largest one)
     '''
     return max(geom.geoms, key=lambda p: p.area)
 
 
-def merge_edges_with_districts(gdf_csv, districts_gdf):
+def merge_edges_and_zones(gdf_csv, zones_gdf):
     '''
-    This function merges network edges with districts using spatial join
+    This function merges network edges with zones using spatial join.
     input:
         gdf_csv: GeoDataFrame containing network edges with your specific columns
-        districts_gdf: GeoDataFrame containing district polygons
+        zones_gdf: GeoDataFrame containing zone polygons
     output:
-        GeoDataFrame with edges and their intersecting districts
+        GeoDataFrame with edges and their intersecting zones
     '''
     # Perform spatial join
-    gdf_edges_with_districts = gpd.sjoin(gdf_csv, districts_gdf, how='left', predicate='intersects')
+    gdf_edges_with_zones = gpd.sjoin(gdf_csv, zones_gdf, how='left', predicate='intersects')
     
     # Group by edge ID and aggregate attributes
-    gdf_edges_with_districts = gdf_edges_with_districts.groupby('link').agg({
+    gdf_edges_with_zones = gdf_edges_with_zones.groupby('link').agg({
         'from_node': 'first',
         'to_node': 'first',
         'length': 'first',
@@ -328,20 +331,20 @@ def merge_edges_with_districts(gdf_csv, districts_gdf):
     # Convert numeric columns
     numeric_columns = ['freespeed', 'capacity', 'lanes', 'vol_car']
     for col in numeric_columns:
-        if col in gdf_edges_with_districts.columns:
-            gdf_edges_with_districts[col] = pd.to_numeric(gdf_edges_with_districts[col], errors='coerce')
+        if col in gdf_edges_with_zones.columns:
+            gdf_edges_with_zones[col] = pd.to_numeric(gdf_edges_with_zones[col], errors='coerce')
 
     # Ensure it's a GeoDataFrame
-    gdf_edges_with_districts = gpd.GeoDataFrame(
-        gdf_edges_with_districts, 
+    gdf_edges_with_zones = gpd.GeoDataFrame(
+        gdf_edges_with_zones, 
         geometry='geometry', 
         crs='EPSG:25832'
     )
     
-    return gdf_edges_with_districts
+    return gdf_edges_with_zones
 
 
-def generate_hexagon_grid_for_polygon(polygon, hexagon_size, projection='EPSG:25832'):
+def generate_hexagon_grid(polygon, hexagon_size, projection='EPSG:25832'):
     '''
     This function generates a hexagonal grid that fits within a given polygon
     input:
@@ -405,43 +408,43 @@ def generate_hexagon_grid_for_polygon(polygon, hexagon_size, projection='EPSG:25
     return grid_clipped
 
 
-def generate_hexagon_grid_for_districts(districts_gdf, hexagon_size, gdf_edges_with_districts, 
+def merge_edges_and_hexagon_grid(zones_gdf, hexagon_size, gdf_edges_with_zones, 
                                         projection='EPSG:25832'):
     '''
-    This function generates a hexagon grid for each district and assigns each edge to the hexagon(s) 
+    This function generates a hexagon grid for each zone and assigns each edge to the hexagon(s) 
     it falls into
     input:
-        districts_gdf: GeoDataFrame containing district polygons
+        zones_gdf: GeoDataFrame containing zone polygons
         hexagon_size: Distance from the hexagon's center to any vertex
-        gdf_edges_with_districts: GeoDataFrame containing network edges with their intersecting districts
+        gdf_edges_with_zones: GeoDataFrame containing network edges with their intersecting zones
         projection: Coordinate reference system for the polygon and grid
     output:
         GeoDataFrame with hexagons clipped to the input polygon
     '''
     # Get the boundary of zone_id 1
-    zone_1_boundary = districts_gdf[districts_gdf['zone_id'] == 1].geometry.values[0]
+    zone_1_boundary = zones_gdf[zones_gdf['zone_id'] == 1].geometry.values[0]
 
     # Create a single continuous hexagon grid for zone 1
     hexagon_grid_all = generate_hexagon_grid_for_polygon(zone_1_boundary, hexagon_size, projection='EPSG:25832')
     
-    # Add district information to each hexagon
-    def get_intersecting_districts(hex_geom):
+    # Add zone information to each hexagon
+    def get_intersecting_zones(hex_geom):
         """
-        This function takes a hexagon geometry and returns a list of district IDs that intersect with the hexagon.
+        This function takes a hexagon geometry and returns a list of zone IDs that intersect with that hexagon.
         """
-        intersecting_districts = []
-        for idx, row in districts_gdf.iterrows():
+        intersecting_zones = []
+        for idx, row in zones_gdf.iterrows():
             if hex_geom.intersects(row['geometry']):
-                district_id = row.get('zone_id', idx+1)
-                intersecting_districts.append(district_id)
-        return intersecting_districts
+                zone_id = row.get('zone_id', idx+1)
+                intersecting_zones.append(zone_id)
+        return intersecting_zones
 
-    hexagon_grid_all['hex_zone_id'] = hexagon_grid_all['geometry'].apply(get_intersecting_districts)
+    hexagon_grid_all['hex_zone_id'] = hexagon_grid_all['geometry'].apply(get_intersecting_zones)
     print(f"Total number of hexagons created: {len(hexagon_grid_all)}")
-    print(f"Number of hexagons in multiple districts: {len(hexagon_grid_all[hexagon_grid_all['hex_zone_id'].apply(lambda x: len(x) >= 2)])}")
+    print(f"Number of hexagons in multiple zones: {len(hexagon_grid_all[hexagon_grid_all['hex_zone_id'].apply(lambda x: len(x) >= 2)])}")
 
     # Spatial join to assign each edge the hexagon(s) it falls into
-    gdf_edges_with_hex = gpd.sjoin(gdf_edges_with_districts, hexagon_grid_all[['geometry', 'hex_zone_id', 'grid_id']], 
+    gdf_edges_with_hex = gpd.sjoin(gdf_edges_with_zones, hexagon_grid_all[['geometry', 'hex_zone_id', 'grid_id']], 
                                 how='left', predicate='intersects')
 
     # Group by edge 'link' and aggregate the hexagon IDs into a list
@@ -465,19 +468,19 @@ def generate_hexagon_grid_for_districts(districts_gdf, hexagon_size, gdf_edges_w
     gdf_edges_with_hex = gpd.GeoDataFrame(
         gdf_edges_with_hex,
         geometry='geometry',
-        crs=gdf_edges_with_districts.crs  # Preserve the original CRS
+        crs=gdf_edges_with_zones.crs  # Preserve the original CRS
     )
 
     # Rename the aggregated columns
     gdf_edges_with_hex.rename(columns={'grid_id': 'hexagon'}, inplace=True)
 
     # Convert numeric columns
-    numeric_columns = ['freespeed', 'capacity', 'lanes', 'vol_car', 'storageCapacityUsedInQsim']
+    numeric_columns = ['freespeed', 'capacity', 'lanes', 'vol_car']
     for col in numeric_columns:
         if col in gdf_edges_with_hex.columns:
             gdf_edges_with_hex[col] = pd.to_numeric(gdf_edges_with_hex[col], errors='coerce')
 
-    # Create is_in_stadt column
+    # Create is_in_stadt column, which helps us identify the edges that are in the city. Because, policies will be applied only for the edges that are in the city.
     gdf_edges_with_hex['is_in_stadt'] = gdf_edges_with_hex['hex_zone_id'].apply(lambda x: 1 if 1 in x else 0)
 
     # Hexagon Statistics
@@ -501,13 +504,13 @@ def check_hexagon_statistics(gdf_edges_with_hex, hexagon_grid_all):
     print('Number of Hexagons containing edges: ', len (unique_values))
     print('Total number of Hexagons created: ', len(hexagon_grid_all))
 
-def plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all, districts_gdf, output_dirs,city_name):
+def plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all, zones_gdf, output_dirs,city_name):
     '''
-    This function plots and saves the network with the hexagon grid and districts
+    This function plots and saves the network with the hexagon grid and zones
     input:
         gdf_edges_with_hex: GeoDataFrame containing network edges with their intersecting hexagons
         hexagon_grid_all: GeoDataFrame containing all hexagons
-        districts_gdf: GeoDataFrame containing districts    
+        zones_gdf: GeoDataFrame containing zones    
         output_dirs: Dictionary containing output directory paths
         city_name: Name of the city
     '''
@@ -540,8 +543,8 @@ def plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all, districts_gdf, out
                 label=None
             )
 
-    # Plot districts in yellow (uniform)
-    districts_gdf.plot(
+    # Plot zones in yellow (uniform)
+    zones_gdf.plot(
         ax=ax, 
         column='zone_id',
         cmap='PuBuGn',
@@ -549,7 +552,7 @@ def plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all, districts_gdf, out
         edgecolor='black',
         linewidth=0.5,
         legend=False,
-        label='Districts'
+        label='Zones'
     )
 
     # Plot hexagons in red (edges only)
@@ -567,17 +570,17 @@ def plot_grid_and_edges(gdf_edges_with_hex, hexagon_grid_all, districts_gdf, out
         Line2D([0], [0], color='blue', linewidth=0.7, label='Zone 1'),
         Line2D([0], [0], color='gray', linewidth=0.7, label='Zone 2'),
         Line2D([0], [0], color='green', linewidth=0.7, label='Zones 1 & 2'),
-        Patch(facecolor='yellow', edgecolor='black', alpha=0.2, label='Districts'),
+        Patch(facecolor='yellow', edgecolor='black', alpha=0.2, label='Zones'),
         Line2D([0], [0], color='red', linewidth=0.8, label='Hexagons')
     ]
 
     ax.legend(handles=legend_elements)
-    plt.title('Network with Hexagon Grid and Districts')
+    plt.title('Network with Hexagon Grid and Zones')
     plt.axis('equal')
     plt.tight_layout()
     
     # Save the plot
-    output_file = output_dirs['hexagon_plots'] / f'{city_name}_network_hexagon_districts.png'
+    output_file = output_dirs['hexagon_plots'] / f'{city_name}_network_hexagon_zones.png'
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"Plot saved to: {output_file}")
     
