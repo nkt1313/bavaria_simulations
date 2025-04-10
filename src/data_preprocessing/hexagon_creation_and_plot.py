@@ -425,7 +425,7 @@ def merge_edges_and_hexagon_grid(zones_gdf, hexagon_size, gdf_edges_with_zones,
     zone_1_boundary = zones_gdf[zones_gdf['zone_id'] == 1].geometry.values[0]
 
     # Create a single continuous hexagon grid for zone 1
-    hexagon_grid_all = generate_hexagon_grid_for_polygon(zone_1_boundary, hexagon_size, projection='EPSG:25832')
+    hexagon_grid_all = generate_hexagon_grid(zone_1_boundary, hexagon_size, projection='EPSG:25832')
     
     # Add zone information to each hexagon
     def get_intersecting_zones(hex_geom):
