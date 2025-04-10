@@ -34,6 +34,10 @@ from matplotlib.colors import Normalize
 # Local imports
 import network_io as nio
 
+import gzip
+import xml.etree.ElementTree as ET
+import geopandas as gpd
+
 def matsim_network_input_to_gdf(network_file):
     """
     Convert MATSim network XML to GeoDataFrame using network_io and extract network attributes
@@ -45,44 +49,58 @@ def matsim_network_input_to_gdf(network_file):
         
     Returns:
     --------
-    tuple : (GeoDataFrame, nodes_dict, df_edges, network_attrs)
+    tuple : (GeoDataFrame, nodes_dict, df_edges, network_attrs, link_attrs)
         - GeoDataFrame containing the network edges
         - Dictionary of node coordinates
         - DataFrame of edges
-        - Dictionary of network attributes
+        - Dictionary of network attributes (e.g. coordinateReferenceSystem, capperiod, etc.)
+        - Dictionary of link-level attributes keyed by link id, where each value is a dictionary of attributes
     """
-    # Parse nodes and edges using nio
+    # Parse nodes and edges using nio (assumed to be imported and available)
     nodes_dict = nio.parse_nodes(network_file)
     df_edges = nio.parse_edges(network_file, nodes_dict)
     
-    # Create GeoDataFrame
+    # Create GeoDataFrame from df_edges and ensure correct CRS
     gdf = gpd.GeoDataFrame(df_edges, geometry='geometry', crs='EPSG:25832')
-    
-    # Ensure correct CRS
     if gdf.crs != "EPSG:25832":
         gdf = gdf.to_crs(epsg=25832)
     
-    # Parse network attributes from XML
+    # Parse network attributes and link-level attributes from XML
     network_attrs = {}
+    link_attrs = {}  # dictionary to store attributes for each link (keyed by link id)
+    
     with gzip.open(network_file, 'rb') as f:
         tree = ET.parse(f)
         root = tree.getroot()
         
-        # Get coordinate reference system
+        # Parse network-level attributes from <attributes>
         attributes = root.find('attributes')
         if attributes is not None:
             for attribute in attributes.findall('attribute'):
                 if attribute.get('name') == 'coordinateReferenceSystem':
                     network_attrs['coordinateReferenceSystem'] = attribute.text
         
-        # Get links attributes
-        links = root.find('links')
-        if links is not None:
+        # Get the <links> element and its attributes
+        links_elem = root.find('links')
+        if links_elem is not None:
             for attr in ['capperiod', 'effectivecellsize', 'effectivelanewidth']:
-                if attr in links.attrib:
-                    network_attrs[attr] = links.attrib[attr]
+                if attr in links_elem.attrib:
+                    network_attrs[attr] = links_elem.attrib[attr]
+            
+            # Iterate over each <link> element to extract link-level attributes
+            for link in links_elem.findall('link'):
+                link_id = link.get('id')
+                attr_dict = {}  # to store this link's additional attributes
+                attributes_sub = link.find('attributes')
+                if attributes_sub is not None:
+                    for attribute in attributes_sub.findall('attribute'):
+                        attr_name = attribute.get('name')
+                        # Optionally, you can also get the attribute's class via attribute.get('class')
+                        attr_dict[attr_name] = attribute.text
+                link_attrs[link_id] = attr_dict
     
-    return gdf, nodes_dict, df_edges, network_attrs
+    return gdf, nodes_dict, df_edges, network_attrs, link_attrs
+
 
 def clean_duplicates_based_on_modes(file_path):
     """
@@ -353,8 +371,9 @@ def merge_edges_and_zones(gdf_csv, zones_gdf):
         'length': 'first',
         'freespeed': 'first',
         'capacity': 'first',
-        'lanes': 'first',
+        'permlanes': 'first',
         'modes': 'first',
+        'oneway': 'first',
         'vol_car': 'first',
         'osm:way:highway': 'first',
         'geometry': 'first',
@@ -362,7 +381,7 @@ def merge_edges_and_zones(gdf_csv, zones_gdf):
     }).reset_index()
 
     # Convert numeric columns
-    numeric_columns = ['freespeed', 'capacity', 'lanes', 'vol_car']
+    numeric_columns = ['freespeed', 'capacity', 'permlanes', 'vol_car']
     for col in numeric_columns:
         if col in gdf_edges_with_zones.columns:
             gdf_edges_with_zones[col] = pd.to_numeric(gdf_edges_with_zones[col], errors='coerce')
@@ -487,8 +506,9 @@ def merge_edges_and_hexagon_grid(zones_gdf, hexagon_size, gdf_edges_with_zones,
         'length': 'first',
         'freespeed': 'first',
         'capacity': 'first',
-        'lanes': 'first',
+        'permlanes': 'first',
         'modes': 'first',
+        'oneway': 'first',
         'vol_car': 'first',
         'osm:way:highway': 'first',
         'geometry': 'first',
