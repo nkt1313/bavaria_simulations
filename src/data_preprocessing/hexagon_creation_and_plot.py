@@ -36,7 +36,20 @@ import network_io as nio
 
 def matsim_network_input_to_gdf(network_file):
     """
-    Convert MATSim network XML to GeoDataFrame using network_io
+    Convert MATSim network XML to GeoDataFrame using network_io and extract network attributes
+    
+    Parameters:
+    -----------
+    network_file : str or Path
+        Path to the MATSim network XML file
+        
+    Returns:
+    --------
+    tuple : (GeoDataFrame, nodes_dict, df_edges, network_attrs)
+        - GeoDataFrame containing the network edges
+        - Dictionary of node coordinates
+        - DataFrame of edges
+        - Dictionary of network attributes
     """
     # Parse nodes and edges using nio
     nodes_dict = nio.parse_nodes(network_file)
@@ -49,7 +62,27 @@ def matsim_network_input_to_gdf(network_file):
     if gdf.crs != "EPSG:25832":
         gdf = gdf.to_crs(epsg=25832)
     
-    return gdf,nodes_dict,df_edges
+    # Parse network attributes from XML
+    network_attrs = {}
+    with gzip.open(network_file, 'rb') as f:
+        tree = ET.parse(f)
+        root = tree.getroot()
+        
+        # Get coordinate reference system
+        attributes = root.find('attributes')
+        if attributes is not None:
+            for attribute in attributes.findall('attribute'):
+                if attribute.get('name') == 'coordinateReferenceSystem':
+                    network_attrs['coordinateReferenceSystem'] = attribute.text
+        
+        # Get links attributes
+        links = root.find('links')
+        if links is not None:
+            for attr in ['capperiod', 'effectivecellsize', 'effectivelanewidth']:
+                if attr in links.attrib:
+                    network_attrs[attr] = links.attrib[attr]
+    
+    return gdf, nodes_dict, df_edges, network_attrs
 
 def clean_duplicates_based_on_modes(file_path):
     """
@@ -249,10 +282,10 @@ def consolidate_road_types(highway_type):
 
     # Mapping of road types to categories
     road_type_mapping = {
-        'motorway': 'trunk',
-        'motorway_link': 'trunk',
-        'trunk': 'trunk',
-        'trunk_link': 'trunk',
+        'motorway': 'primary',
+        'motorway_link': 'primary',
+        'trunk': 'primary',
+        'trunk_link': 'primary',
         'primary': 'primary',
         'primary_link': 'primary',
         'secondary': 'secondary',
