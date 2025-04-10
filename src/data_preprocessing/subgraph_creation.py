@@ -316,8 +316,8 @@ def generate_scenario_labels(road_type_subsets):
     return scenario_labels
 
 
-def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subsets, scenario_labels, 
-                             city_name, seed_number, output_dirs, nodes_dict, network_attrs,
+def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
+                             city_name, seed_number, output_dirs, nodes_dict, network_attrs, link_attrs,
                              capacity_tuning_factor=capacity_tuning_factor,
                              betweenness_centrality_cutoff=betweenness_centrality_cutoff,
                              closeness_centrality_cutoff=closeness_centrality_cutoff):
@@ -346,16 +346,6 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
     total_scenarios = 0
     first_scenario_path = None
     
-    # Pre-calculate scenario masks for all road types and subsets
-    scenario_masks = {}
-    for road_type, subsets in road_type_subsets.items():
-        scenario_masks[road_type] = []
-        for subset in subsets:
-            mask = gdf_edges_with_hex['hexagon'].apply(
-                lambda x: any(h in subset for h in x) if isinstance(x, list) else False
-            ) & (gdf_edges_with_hex['consolidated_road_type'] == road_type)
-            scenario_masks[road_type].append(mask)
-    
     # Process each road type and its scenarios
     for road_type, subsets in road_type_subsets.items():
         print(f"\nProcessing road type: {road_type}")
@@ -377,8 +367,12 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
             if first_scenario_path is None:
                 first_scenario_path = network_path
             
-            # Get edges in scenario hexagons using pre-calculated mask
-            scenario_edges = gdf_edges_with_hex[scenario_masks[road_type][i]]
+            # Get edges in scenario hexagons (and the correct road type)
+            scenario_mask = gdf_edges_with_hex['hexagon'].apply(
+                lambda x: any(h in subset for h in x) if isinstance(x, list) else False
+            ) & (gdf_edges_with_hex['consolidated_road_type'] == road_type)
+            
+            scenario_edges = gdf_edges_with_hex[scenario_mask]
             
             # Create network XML structure
             root = ET.Element('network')
@@ -388,13 +382,7 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
             attribute = ET.SubElement(attributes, 'attribute')
             attribute.set('name', 'coordinateReferenceSystem')
             attribute.set('class', 'java.lang.String')
-            attribute.text = network_attrs.get('coordinateReferenceSystem', 'Atlantis')
-            
-            # Add links element with attributes from input file
-            links = ET.SubElement(root, 'links')
-            links.set('capperiod', network_attrs.get('capperiod', '01:00:00'))
-            links.set('effectivecellsize', network_attrs.get('effectivecellsize', '7.5'))
-            links.set('effectivelanewidth', network_attrs.get('effectivelanewidth', '3.75'))
+            attribute.text = network_attrs.get('coordinateReferenceSystem')
             
             # Add all nodes from the parent network in sorted order
             nodes = ET.SubElement(root, 'nodes')
@@ -414,24 +402,46 @@ def create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subse
                     print(f"Warning: Node {node_id} not found in nodes_dict")
                     continue
             
-            # Add all links with adjusted capacities for scenario edges
+            # Add links element with attributes from input file
+            links = ET.SubElement(root, 'links')
+            links.set('capperiod', network_attrs.get('capperiod'))
+            links.set('effectivecellsize', network_attrs.get('effectivecellsize'))
+            links.set('effectivelanewidth', network_attrs.get('effectivelanewidth'))
+        
+            # Create all links at once
             for _, edge in gdf_edges_with_hex.iterrows():
-                # Find matching link in matsim_network
-                matching_link = matsim_network[matsim_network['id'] == edge['link']].iloc[0]
-                
                 link = ET.SubElement(links, 'link')
-                # Copy all attributes from matsim_network link
-                for attr in ['id', 'from', 'to', 'length', 'freespeed', 'modes','permlanes','oneway','geometry']:
-                    link.set(attr, str(matching_link[attr]))
+                link.set('id', str(edge['link']))
+                link.set('from', str(edge['from_node']))
+                link.set('to', str(edge['to_node']))
+                link.set('length', str(edge['length']))
+                link.set('freespeed', str(edge['freespeed']))
                 
-                # Use capacity from gdf_edges_with_hex
-                if (edge['link'] in scenario_edges['link'].values and
-                    edge['betweenness'] < betweenness_cutoff and 
-                    edge['closeness'] > closeness_cutoff):  # Using calculated cutoff
+                # Adjust capacity if edge is in scenario hexagons
+                if edge['id'] in scenario_edges['id'].values:
                     capacity = float(edge['capacity']) * capacity_tuning_factor
                     link.set('capacity', str(capacity))
+                    link.set('scenario_edge', 'true')  # Identifier for scenario edges
                 else:
                     link.set('capacity', str(edge['capacity']))
+                    link.set('scenario_edge', 'false')
+                
+                link.set('permlanes', str(edge['permlanes']))
+                link.set('oneway', str(edge['oneway']))
+                link.set('modes', str(edge['modes']))
+                
+                # Add link attributes if they exist
+                if edge['id'] in link_attrs:
+                    attributes_elem = ET.SubElement(link, 'attributes')
+                    for attr_name, attr_value in link_attrs[edge['id']].items():
+                        attribute_elem = ET.SubElement(attributes_elem, 'attribute')
+                        attribute_elem.set('name', attr_name)
+                        # Set class based on the attribute name
+                        if attr_name == 'osm:way:id':
+                            attribute_elem.set('class', 'java.lang.Long')
+                        else:
+                            attribute_elem.set('class', 'java.lang.String')
+                        attribute_elem.text = str(attr_value)
 
             
             # Create the XML tree and save it
@@ -660,10 +670,19 @@ def cross_check_for_created_networks(check_output_subgraph_path, gdf_edges_with_
 
 def main():
     #### Hexagon Creation ################################################################################
-    matsim_network, nodes, df_edges, network_attrs = matsim_network_input_to_gdf(matsim_network_file_path)
+    matsim_network, nodes, df_edges, network_attrs, link_attrs = matsim_network_input_to_gdf(matsim_network_file_path)
     cleaned_network = clean_duplicates_based_on_modes(csv_filepath)
     cleaned_network['geometry'] = cleaned_network['geometry'].apply(wkt.loads)
-    cleaned_network=gpd.GeoDataFrame(cleaned_network,geometry='geometry',crs='EPSG:25832')
+    
+    # Create a lookup dictionary for matsim_network attributes
+    matsim_attrs = {row['id']: row for _, row in matsim_network.iterrows()}
+    
+    # Add MATSim network attributes to cleaned_network
+    cleaned_network['permlanes'] = cleaned_network['link'].map(lambda x: matsim_attrs[x]['permlanes'])
+    cleaned_network['oneway'] = cleaned_network['link'].map(lambda x: matsim_attrs[x]['oneway'])
+    
+    # Create GeoDataFrame with all attributes
+    cleaned_network = gpd.GeoDataFrame(cleaned_network, geometry='geometry', crs='EPSG:25832')
     nodes_dict = create_nodes_dict(cleaned_network)
     
     gdf = gpd.read_file(administrative_boundary_json_path)
@@ -700,12 +719,13 @@ def main():
     #generate the scenario labels
     scenario_labels = generate_scenario_labels(road_type_subsets)
     #create the scenario networks and get the first scenario path
-    first_scenario = create_scenario_networks(matsim_network, gdf_edges_with_hex, road_type_subsets, scenario_labels, 
-                             city_name=city_name, seed_number=seed_number, 
-                             output_dirs=output_dirs, nodes_dict=nodes_dict, network_attrs=network_attrs,
-                             capacity_tuning_factor=capacity_tuning_factor,
-                             betweenness_centrality_cutoff=betweenness_centrality_cutoff,
-                             closeness_centrality_cutoff=closeness_centrality_cutoff)
+    first_scenario = create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
+                                                    link_attrs=link_attrs,        
+                                                    city_name=city_name, seed_number=seed_number, 
+                                                    output_dirs=output_dirs, nodes_dict=nodes_dict, network_attrs=network_attrs,
+                                                 capacity_tuning_factor=capacity_tuning_factor,
+                                                 betweenness_centrality_cutoff=betweenness_centrality_cutoff,
+                                                    closeness_centrality_cutoff=closeness_centrality_cutoff)
     
     #### Check the created networks #######################################################################
     print(f"\nChecking first created scenario: {first_scenario.name}")
