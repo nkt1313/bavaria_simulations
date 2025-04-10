@@ -710,8 +710,6 @@ def main():
     
     centrality_df, gdf_edges_with_hex, G = analyze_centrality_measures(gdf_edges_with_hex, output_dirs, city_only=True)
     size_counts, largest_component= verify_components(G) 
-    convert_and_save_geodataframe(centrality_df, output_dirs['centrality_csv'] / f'{city_name}_centrality_measures.geojson')
-
        
     #### Subgraph Creation ###############################################################################
     
