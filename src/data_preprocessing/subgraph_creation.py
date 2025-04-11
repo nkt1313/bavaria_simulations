@@ -540,7 +540,7 @@ def plot_check_for_created_networks(check_output_subgraph_path, zones_gdf, hexag
         Dictionary containing output directory paths. If provided, will save the plot.
     """
     # Load the network file
-    matsim_network, nodes_subgraph, edges_subgraph = matsim_network_input_to_gdf(check_output_subgraph_path)
+    matsim_network, nodes_subgraph, edges_subgraph,network_attrs, link_attrs = matsim_network_input_to_gdf(check_output_subgraph_path)
     
     # Match the highway_consolidated column from gdf_edges_with_hex to matsim_network
     highway_mapping = dict(zip(gdf_edges_with_hex['link'], gdf_edges_with_hex['consolidated_road_type']))
@@ -658,7 +658,7 @@ def cross_check_for_created_networks(check_output_subgraph_path, gdf_edges_with_
         Seed number from city_seed_X directory structure
     """
     # Load the network file
-    matsim_network, nodes_subgraph, edges_subgraph = matsim_network_input_to_gdf(check_output_subgraph_path)
+    matsim_network, nodes_subgraph, edges_subgraph,network_attrs, link_attrs = matsim_network_input_to_gdf(check_output_subgraph_path)
     
     # Get scenario information (handling both old and new filename formats)
     filename = Path(check_output_subgraph_path).name
