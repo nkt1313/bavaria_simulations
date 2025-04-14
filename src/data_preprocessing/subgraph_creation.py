@@ -149,7 +149,7 @@ closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on c
 target_size = 20 #total number of subgraphs to be created
 distribution_mean_factor = 5
 distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
-seed_number = 33 #This is the seed number for the random number generator
+seed_number = 43 #This is the seed number for the random number generator
 ######## City Names #######################################################################################################
 city_name = 'augsburg'
 ########################################################################################################################
@@ -422,22 +422,20 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             else:
                 print("No edges of this road type in the selected hexagons")
             
-            # Create network XML structure
+            # Create the XML structure
             root = ET.Element('network')
-            root.text = '\n'  # Adds a blank line after <network>
+            root.text = '\n'  # Newline after network tag
             
-            # Add network attributes with proper indentation
+            # Add network attributes
             attributes = ET.SubElement(root, 'attributes')
             attributes.text = '\n\t\t'  # Add indentation for attributes content
-            attributes.tail = '\n\t'  # Add indentation after attributes
+            attributes.tail = '\n'  # Add indentation after attributes
             
             attribute = ET.SubElement(attributes, 'attribute')
             attribute.set('name', 'coordinateReferenceSystem')
             attribute.set('class', 'java.lang.String')
             attribute.text = network_attrs.get('coordinateReferenceSystem', 'Atlantis')
-            attribute.tail = '\n\t\t'  # Add indentation after attribute
-            # After closing </attributes>
-            attributes.tail = '\n\t'
+            attribute.tail = '\n'  # Add indentation after attribute
             
             # Add all nodes from the parent network in sorted order
             # Add visual separator as comment before nodes
@@ -446,7 +444,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             comment_nodes.tail = '\n\n\t'  # Blank line after comment before <nodes>
             nodes = ET.SubElement(root, 'nodes')
             nodes.text = '\n\t\t'  # Add initial indentation for nodes
-            nodes.tail = '\n\n\t'  # Add indentation after nodes
+            nodes.tail = '\n\n'  # Add indentation after nodes
             
             node_ids = set()
             for _, edge in gdf_edges_with_hex.iterrows():
@@ -463,7 +461,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 else:
                     print(f"Warning: Node {node_id} not found in nodes_dict")
                     continue
-                node.text = '\n\t\t\t'
+                node.text = ''
                 node.tail = '\n\t\t'  # Add indentation after node
                 
             # Add links element with attributes from input file
@@ -500,7 +498,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 link.set('modes', str(edge['modes']))
                 
                 # Add link attributes if they exist
-                if edge['link'] in link_attrs:
+                if edge['link'] in link_attrs and link_attrs[edge['link']]:
                     attributes_elem = ET.SubElement(link, 'attributes')
                     attributes_elem.text = '\n\t\t\t\t'  # Add indentation for attributes
                     attributes_elem.tail = '\n\t\t\t'  # Add indentation after attributes
@@ -517,8 +515,11 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                         attribute_elem.tail = '\n\t\t\t\t'  # Add indentation between attributes
                 
                 link.text = '\n\t\t\t'   # This fixes the indent before children and </link>
-                link.tail = '\n\t\t'     # Aligns next <link> or closes <links> properly
+                link.tail = '\n\n'     # Aligns next <link> or closes <links> properly
             
+            comment_end = ET.Comment(' ====================================================================== ')
+            root.append(comment_end)
+            comment_end.tail = '\n'  # Newline before </network>
             # Create the XML tree
             tree = ET.ElementTree(root)
             
