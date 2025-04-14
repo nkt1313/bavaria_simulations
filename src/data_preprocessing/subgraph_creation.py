@@ -142,7 +142,7 @@ output_base_path = base_dir / "data"/ "subgraphs"
 
 ######## Control Center for Variables #################################################################################
 
-hexagon_size = 1000  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
+hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
 capacity_tuning_factor = 0.5 #This is the factor by which the capacity of the links is reduced
 betweenness_centrality_cutoff = 0.8 # Take the lowest 80% of the links based on betweenness centrality
 closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on closeness centrality
@@ -416,15 +416,19 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             # Create network XML structure
             root = ET.Element('network')
             
-            # Add network attributes from input file
+            # Add network attributes
             attributes = ET.SubElement(root, 'attributes')
             attribute = ET.SubElement(attributes, 'attribute')
             attribute.set('name', 'coordinateReferenceSystem')
             attribute.set('class', 'java.lang.String')
             attribute.text = network_attrs.get('coordinateReferenceSystem')
             
+            # Add separator comment
+            ET.SubElement(root, 'comment').text = '======================================================================'
+            
             # Add all nodes from the parent network in sorted order
             nodes = ET.SubElement(root, 'nodes')
+            nodes.text = '\n\t\t'  # Add initial indentation for nodes
             node_ids = set()
             for _, edge in gdf_edges_with_hex.iterrows():
                 node_ids.add(edge['from_node'])
@@ -440,9 +444,15 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 else:
                     print(f"Warning: Node {node_id} not found in nodes_dict")
                     continue
+                node.text = '\n\t\t\t'  # Add indentation for node content
+                node.tail = '\n\t\t'  # Add indentation after node
+            
+            # Add separator comment
+            ET.SubElement(root, 'comment').text = '======================================================================'
             
             # Add links element with attributes from input file
             links = ET.SubElement(root, 'links')
+            links.text = '\n\t\t'  # Add initial indentation for links
             links.set('capperiod', network_attrs.get('capperiod'))
             links.set('effectivecellsize', network_attrs.get('effectivecellsize'))
             links.set('effectivelanewidth', network_attrs.get('effectivelanewidth'))
@@ -460,10 +470,8 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 if edge['link'] in scenario_edges['link'].values:
                     capacity = float(edge['capacity']) * capacity_tuning_factor
                     link.set('capacity', str(capacity))
-                    link.set('scenario_edge', 'true')  # Identifier for scenario edges
                 else:
                     link.set('capacity', str(edge['capacity']))
-                    link.set('scenario_edge', 'false')
                 
                 link.set('permlanes', str(edge['permlanes']))
                 link.set('oneway', str(edge['oneway']))
@@ -472,6 +480,9 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 # Add link attributes if they exist
                 if edge['link'] in link_attrs:
                     attributes_elem = ET.SubElement(link, 'attributes')
+                    attributes_elem.text = '\n\t\t\t\t'  # Add indentation for attributes
+                    attributes_elem.tail = '\n\t\t\t'  # Add indentation after attributes
+                    
                     for attr_name, attr_value in link_attrs[edge['link']].items():
                         attribute_elem = ET.SubElement(attributes_elem, 'attribute')
                         attribute_elem.set('name', attr_name)
@@ -481,16 +492,21 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                         else:
                             attribute_elem.set('class', 'java.lang.String')
                         attribute_elem.text = str(attr_value)
-
+                        attribute_elem.tail = '\n\t\t\t\t'  # Add indentation between attributes
+                
+                link.text = '\n\t\t\t'  # Add indentation for link content
+                link.tail = '\n\t\t'  # Add indentation after link
             
-            # Create the XML tree and save it
+            # Create the XML tree
             tree = ET.ElementTree(root)
             
-            # Create the XML string with proper declaration
+            # Create the XML string with proper declaration and formatting
             xml_declaration = (
                 '<?xml version="1.0" encoding="UTF-8"?>\n'
                 '<!DOCTYPE network SYSTEM "http://www.matsim.org/files/dtd/network_v2.dtd">\n'
             )
+            
+            # Convert to string with proper indentation
             xml_str = xml_declaration + ET.tostring(root, encoding='unicode')
             
             # Save as gzipped XML
