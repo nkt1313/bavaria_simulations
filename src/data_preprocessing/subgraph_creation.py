@@ -142,7 +142,7 @@ output_base_path = base_dir / "data"/ "subgraphs"
 
 ######## Control Center for Variables #################################################################################
 
-hexagon_size = 1500  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
+hexagon_size = 1000  # Size in meters for EPSG:25832 and in degrees for EPSG:4326 **********VERY IMPORTANT********** 
 capacity_tuning_factor = 0.5 #This is the factor by which the capacity of the links is reduced
 betweenness_centrality_cutoff = 0.8 # Take the lowest 80% of the links based on betweenness centrality
 closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on closeness centrality
