@@ -244,6 +244,16 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
     # Calculate number of subsets per road type
     subsets_per_type = target_size // len(road_types)
     
+    # Get all unique hexagons across all road types
+    unique_hexagons = set()
+    for hex_list in road_type_hexagons.values():
+        unique_hexagons.update(hex_list)
+    unique_hexagons = sorted(list(unique_hexagons))
+    
+    # Calculate target mean and std dev based on all unique hexagons
+    target_mean = len(unique_hexagons) / distribution_mean_factor
+    std_dev = len(unique_hexagons) / distribution_std_factor
+    
     # Dictionary to store subsets for each road type
     road_type_subsets = {}
     
@@ -255,15 +265,11 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
             print(f"Warning: No hexagons found for road type {road_type}")
             continue
             
-        # Calculate target mean and std dev based on this road type's hexagons
-        target_mean = len(road_type_hexagons_list) / distribution_mean_factor
-        std_dev = len(road_type_hexagons_list) / distribution_std_factor
-        
         # Generate subsets for this road type
         unique_subsets = set()
         
         while len(unique_subsets) < subsets_per_type:
-            # Sample subset size from normal distribution
+            # Sample subset size from normal distribution using combined target mean and std dev
             subset_size = max(1, int(np.random.normal(target_mean, std_dev)))
             subset_size = min(subset_size, len(road_type_hexagons_list))
             
@@ -272,24 +278,18 @@ def generate_road_type_specific_subsets(gdf_edges_with_hex, city_name, seed_numb
             unique_subsets.add(subset)
         
         road_type_subsets[road_type] = list(unique_subsets)
-        print(f"Road type: {road_type}")
-        print(f"Number of subsets: {len(road_type_subsets[road_type])}")
-        print(f"Subset sizes: {[len(subset) for subset in road_type_subsets[road_type]]}")
-        print(f"Total number of hexagons: {sum([len(subset) for subset in road_type_subsets[road_type]])}")
-        print("-" * 50)
-        print(f"Target mean: {target_mean}")
-        print(f"Actual mean: {np.mean([len(subset) for subset in road_type_subsets[road_type]])}")
-        print(f"Target std dev: {std_dev}")
-        print(f"Actual std dev: {np.std([len(subset) for subset in road_type_subsets[road_type]])}")
-        print("-" * 50)
+        print(f"Generated {len(road_type_subsets[road_type])} subsets for {road_type}")
     
     # Calculate overall statistics
     all_subsets = [subset for subsets in road_type_subsets.values() for subset in subsets]
     overall_mean = np.mean([len(s) for s in all_subsets])
     
     print(f"\nSubset Generation Summary for {city_name}:")
+    print(f"Total number of unique hexagons: {len(unique_hexagons)}")
+    print(f"Target mean based on unique hexagons: {target_mean:.2f}")
+    print(f"Target std dev based on unique hexagons: {std_dev:.2f}")
     print(f"Total number of subsets: {len(all_subsets)}")
-    print(f"Actual mean subset length: {overall_mean:.2f}")
+    print(f"Overall actual mean subset length: {overall_mean:.2f}")
     print(f"Number of road types: {len(road_types)}")
     print(f"Subsets per road type: {subsets_per_type}")
     print(f"City: {city_name}")
