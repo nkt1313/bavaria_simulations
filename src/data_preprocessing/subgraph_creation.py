@@ -149,7 +149,7 @@ closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on c
 target_size = 20 #total number of subgraphs to be created
 distribution_mean_factor = 5
 distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
-seed_number = 23 #This is the seed number for the random number generator
+seed_number = 33 #This is the seed number for the random number generator
 ######## City Names #######################################################################################################
 city_name = 'augsburg'
 ########################################################################################################################
@@ -424,6 +424,7 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             
             # Create network XML structure
             root = ET.Element('network')
+            root.text = '\n'  # Adds a blank line after <network>
             
             # Add network attributes with proper indentation
             attributes = ET.SubElement(root, 'attributes')
@@ -434,12 +435,18 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             attribute.set('name', 'coordinateReferenceSystem')
             attribute.set('class', 'java.lang.String')
             attribute.text = network_attrs.get('coordinateReferenceSystem', 'Atlantis')
-            attribute.tail = '\n\t'  # Add indentation after attribute
+            attribute.tail = '\n\t\t'  # Add indentation after attribute
+            # After closing </attributes>
+            attributes.tail = '\n\t'
             
             # Add all nodes from the parent network in sorted order
+            # Add visual separator as comment before nodes
+            comment_nodes = ET.Comment(' ====================================================================== ')
+            root.append(comment_nodes)
+            comment_nodes.tail = '\n\n\t'  # Blank line after comment before <nodes>
             nodes = ET.SubElement(root, 'nodes')
             nodes.text = '\n\t\t'  # Add initial indentation for nodes
-            nodes.tail = '\n\t'  # Add indentation after nodes
+            nodes.tail = '\n\n\t'  # Add indentation after nodes
             
             node_ids = set()
             for _, edge in gdf_edges_with_hex.iterrows():
@@ -456,11 +463,13 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                 else:
                     print(f"Warning: Node {node_id} not found in nodes_dict")
                     continue
-                # Add newline and indentation before closing tag
-                node.text = '\n\t\t\t'  # Add indentation for node content
+                node.text = '\n\t\t\t'
                 node.tail = '\n\t\t'  # Add indentation after node
-            
+                
             # Add links element with attributes from input file
+            comment_links = ET.Comment(' ====================================================================== ')
+            root.append(comment_links)
+            comment_links.tail = '\n\n\t'  # Blank line after comment before <links>
             links = ET.SubElement(root, 'links')
             links.text = '\n\t\t'  # Add initial indentation for links
             links.tail = '\n'  # Add newline after links
@@ -507,8 +516,8 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
                         attribute_elem.text = str(attr_value)
                         attribute_elem.tail = '\n\t\t\t\t'  # Add indentation between attributes
                 
-                link.text = None  # No text content
-                link.tail = '\n\t\t'  # Add indentation after link
+                link.text = '\n\t\t\t'   # This fixes the indent before children and </link>
+                link.tail = '\n\t\t'     # Aligns next <link> or closes <links> properly
             
             # Create the XML tree
             tree = ET.ElementTree(root)
