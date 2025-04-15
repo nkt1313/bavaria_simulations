@@ -447,9 +447,9 @@ def create_scenario_networks(matsim_network_file_path,gdf_edges_with_hex, road_t
             # Modify only the capacity of the specified links
             for link_id, from_node, to_node in links_to_modify:
             # Match the specific link line
-            pattern = (
+                pattern = (
                 rf'(<link[^>]*\bid="{link_id}"[^>]*\bfrom="{from_node}"[^>]*\bto="{to_node}"[^>]*capacity=")([^"]+)(")'
-            )
+                )
     
             def replace_capacity(match):
                 original = float(match.group(2))
