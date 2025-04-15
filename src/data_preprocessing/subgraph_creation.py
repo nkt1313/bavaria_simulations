@@ -52,7 +52,8 @@ from itertools import islice
 from pathlib import Path
 import random
 import sys
-import xml.etree.ElementTree as ET
+from lxml import etree as ET
+import re
 
 # Third-party imports
 import networkx as nx
@@ -68,6 +69,12 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.colors import Normalize
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from tqdm import tqdm
+from typing import Dict, List, Tuple, Set, Optional
+import shutil
+import time
+from datetime import datetime
 
 # Local imports
 import network_io as nio
@@ -149,7 +156,7 @@ closeness_centrality_cutoff = 0.2 # Take the highest 80% of the links based on c
 target_size = 20 #total number of subgraphs to be created
 distribution_mean_factor = 5
 distribution_std_factor = 10 # for n denoting the number of hexagons, we create subgraphs whose length follows a normal distribution with mean (n/distribution_mean_factor and std dev (n/distribution_std_factor)
-seed_number = 43 #This is the seed number for the random number generator
+seed_number = 53 #This is the seed number for the random number generator
 ######## City Names #######################################################################################################
 city_name = 'augsburg'
 ########################################################################################################################
@@ -332,14 +339,14 @@ def generate_scenario_labels(road_type_subsets):
     return scenario_labels
 
 
-def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
-                             city_name, seed_number, output_dirs, nodes_dict, network_attrs, link_attrs,
-                             capacity_tuning_factor=capacity_tuning_factor,
-                             betweenness_centrality_cutoff=betweenness_centrality_cutoff,
-                             closeness_centrality_cutoff=closeness_centrality_cutoff):
+def create_scenario_networks(matsim_network_file_path,gdf_edges_with_hex, road_type_subsets, scenario_labels, 
+                              city_name, seed_number, output_dirs, nodes_dict, network_attrs, link_attrs,
+                              capacity_tuning_factor=capacity_tuning_factor,
+                              betweenness_centrality_cutoff=betweenness_centrality_cutoff,
+                              closeness_centrality_cutoff=closeness_centrality_cutoff):
     """
-    Create network.xml.gz files for each scenario, organized in folders of 1,000 files.
-    Includes all edges from parent network but adjusts capacities for edges in scenario hexagons.
+    Create network.xml.gz files for each scenario by modifying only the capacity of specific links
+    in the existing MATSim network file.
     """
     # Get the networks directory from output_dirs
     networks_base = output_dirs['networks']
@@ -362,9 +369,20 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
     total_scenarios = 0
     first_scenario_path = None
     
+    parser = ET.XMLParser(remove_blank_text=True)
+    
     # Process each road type and its scenarios
     for road_type, subsets in road_type_subsets.items():
         print(f"\nProcessing road type: {road_type}")
+        
+        # First, get all edges of this road type in the STADT AREA that meet centrality conditions
+        road_type_mask = (
+            (gdf_filtered['consolidated_road_type'] == road_type) &
+            (gdf_filtered['betweenness'] < betweenness_cutoff) &
+            (gdf_filtered['closeness'] > closeness_cutoff)
+        )
+        road_type_edges = gdf_filtered[road_type_mask].copy() #all the edges in the stadt area & road type that meet the conditions
+        
         for i, subset in enumerate(subsets):
             # Get the scenario label
             label = scenario_labels[(road_type, i)]
@@ -383,158 +401,71 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
             if first_scenario_path is None:
                 first_scenario_path = network_path
             
-            # Get edges in scenario hexagons (and the correct road type) with centrality conditions
-            scenario_mask = (
-                gdf_edges_with_hex['hexagon'].apply(
-                    lambda x: any(h in subset for h in x) if isinstance(x, list) else False
-                ) & 
-                (gdf_edges_with_hex['consolidated_road_type'] == road_type) &
-                (gdf_edges_with_hex['betweenness'] < betweenness_cutoff) &
-                (gdf_edges_with_hex['closeness'] > closeness_cutoff)
+            # Get edges in scenario hexagons for this road type, that are in the subset and meet the conditions
+            scenario_mask = road_type_edges['hexagon'].apply(
+                lambda x: any(h in subset for h in x) if isinstance(x, list) else False
             )
             
-            scenario_edges = gdf_edges_with_hex[scenario_mask]
+            scenario_edges = road_type_edges[scenario_mask] #all the edges in the subset that meet the conditions
             
-            edges_in_scenario_hexagons = gdf_edges_with_hex[    
-                (gdf_edges_with_hex['hexagon'].apply(
+            all_road_type_edges_in_scenario_hexagons = gdf_filtered[    
+                (gdf_filtered['hexagon'].apply(
                     lambda x: any(h in subset for h in x) if isinstance(x, list) else False
                 ))
             ]
             
             # Get edges in hexagons for current road type
-            edges_in_road_type_hexagons = gdf_edges_with_hex[
-                (gdf_edges_with_hex['hexagon'].apply(
+            current_road_type_edges_in_scenario_hexagons = gdf_filtered[ 
+                (gdf_filtered['hexagon'].apply(
                     lambda x: any(h in subset for h in x) if isinstance(x, list) else False
                 )) & 
-                (gdf_edges_with_hex['consolidated_road_type'] == road_type)
+                (gdf_filtered['consolidated_road_type'] == road_type)
             ]
             
             edges_with_reduced_capacity = len(scenario_edges)
             
             print(f"\nScenario {label} statistics:")
-            print(f"Total edges in scenario hexagons: {len(edges_in_scenario_hexagons)}")
-            print(f"Edges in hexagons for road type '{road_type}': {len(edges_in_road_type_hexagons)}")
-            print(f"Edges with reduced capacity: {edges_with_reduced_capacity}")
+            print(f"Edge count in scenario hexagons (all road types): {len(all_road_type_edges_in_scenario_hexagons)}")
+            print(f"Edge count in scenario hexagons (current road type): {len(current_road_type_edges_in_scenario_hexagons)}")
+            print(f"Edges with reduced capacity (current road type): {edges_with_reduced_capacity}")
             
             # Only calculate percentage if there are edges of this road type in the hexagons
-            if len(edges_in_road_type_hexagons) > 0:
-                print(f"Percentage of edges with reduced capacity: {(edges_with_reduced_capacity/len(edges_in_road_type_hexagons))*100:.2f}%")
+            if len(current_road_type_edges_in_scenario_hexagons) > 0:
+                print(f"Percentage of edges with reduced capacity: {(edges_with_reduced_capacity/len(current_road_type_edges_in_scenario_hexagons))*100:.2f}%")
             else:
                 print("No edges of this road type in the selected hexagons")
             
-            # Create the XML structure
-            root = ET.Element('network')
-            root.text = '\n'  # Newline after network tag
+            # Read the original network file
+            with gzip.open(matsim_network_file_path, 'rt', encoding='utf-8') as f:
+                xml_str = f.read()
             
-            # Add network attributes
-            attributes = ET.SubElement(root, 'attributes')
-            attributes.text = '\n\t\t'  # Add indentation for attributes content
-            attributes.tail = '\n'  # Add indentation after attributes
+            # Create a set of tuples (link_id, from_node, to_node) that need capacity reduction
+            links_to_modify = set(zip(scenario_edges['link'].values, 
+                                     scenario_edges['from_node'].values, 
+                                     scenario_edges['to_node'].values))
             
-            attribute = ET.SubElement(attributes, 'attribute')
-            attribute.set('name', 'coordinateReferenceSystem')
-            attribute.set('class', 'java.lang.String')
-            attribute.text = network_attrs.get('coordinateReferenceSystem', 'Atlantis')
-            attribute.tail = '\n'  # Add indentation after attribute
-            
-            # Add all nodes from the parent network in sorted order
-            # Add visual separator as comment before nodes
-            comment_nodes = ET.Comment(' ====================================================================== ')
-            root.append(comment_nodes)
-            comment_nodes.tail = '\n\n\t'  # Blank line after comment before <nodes>
-            nodes = ET.SubElement(root, 'nodes')
-            nodes.text = '\n\t\t'  # Add initial indentation for nodes
-            nodes.tail = '\n\n'  # Add indentation after nodes
-            
-            node_ids = set()
-            for _, edge in gdf_edges_with_hex.iterrows():
-                node_ids.add(edge['from_node'])
-                node_ids.add(edge['to_node'])
-            
-            for node_id in sorted(node_ids):
-                node = ET.SubElement(nodes, 'node')
-                node.set('id', str(node_id))
-                if node_id in nodes_dict:
-                    x, y = nodes_dict[node_id]
-                    node.set('x', str(x))
-                    node.set('y', str(y))
-                else:
-                    print(f"Warning: Node {node_id} not found in nodes_dict")
-                    continue
-                node.text = ''
-                node.tail = '\n\t\t'  # Add indentation after node
-                
-            # Add links element with attributes from input file
-            comment_links = ET.Comment(' ====================================================================== ')
-            root.append(comment_links)
-            comment_links.tail = '\n\n\t'  # Blank line after comment before <links>
-            links = ET.SubElement(root, 'links')
-            links.text = '\n\t\t'  # Add initial indentation for links
-            links.tail = '\n'  # Add newline after links
-            
-            # Set attributes on the same line as the opening tag
-            links.set('capperiod', network_attrs.get('capperiod', '01:00:00'))
-            links.set('effectivecellsize', network_attrs.get('effectivecellsize', '7.5'))
-            links.set('effectivelanewidth', network_attrs.get('effectivelanewidth', '3.75'))
-        
-            # Create all links at once
-            for _, edge in gdf_edges_with_hex.iterrows():
-                link = ET.SubElement(links, 'link')
-                link.set('id', str(edge['link']))
-                link.set('from', str(edge['from_node']))
-                link.set('to', str(edge['to_node']))
-                link.set('length', str(edge['length']))
-                link.set('freespeed', str(edge['freespeed']))
-                
-                # Adjust capacity if edge is in scenario edges
-                if edge['link'] in scenario_edges['link'].values:
-                    capacity = float(edge['capacity']) * capacity_tuning_factor
-                    link.set('capacity', str(capacity))
-                else:
-                    link.set('capacity', str(edge['capacity']))
-                
-                link.set('permlanes', str(edge['permlanes']))
-                link.set('oneway', str(edge['oneway']))
-                link.set('modes', str(edge['modes']))
-                
-                # Add link attributes if they exist
-                if edge['link'] in link_attrs and link_attrs[edge['link']]:
-                    attributes_elem = ET.SubElement(link, 'attributes')
-                    attributes_elem.text = '\n\t\t\t\t'  # Add indentation for attributes
-                    attributes_elem.tail = '\n\t\t\t'  # Add indentation after attributes
-                    
-                    for attr_name, attr_value in link_attrs[edge['link']].items():
-                        attribute_elem = ET.SubElement(attributes_elem, 'attribute')
-                        attribute_elem.set('name', attr_name)
-                        # Set class based on the attribute name
-                        if attr_name == 'osm:way:id':
-                            attribute_elem.set('class', 'java.lang.Long')
-                        else:
-                            attribute_elem.set('class', 'java.lang.String')
-                        attribute_elem.text = str(attr_value)
-                        attribute_elem.tail = '\n\t\t\t\t'  # Add indentation between attributes
-                
-                link.text = '\n\t\t\t'   # This fixes the indent before children and </link>
-                link.tail = '\n\n'     # Aligns next <link> or closes <links> properly
-            
-            comment_end = ET.Comment(' ====================================================================== ')
-            root.append(comment_end)
-            comment_end.tail = '\n'  # Newline before </network>
-            # Create the XML tree
-            tree = ET.ElementTree(root)
-            
-            # Create the XML string with proper declaration and formatting
-            xml_declaration = (
-                '<?xml version="1.0" encoding="UTF-8"?>\n'
-                '<!DOCTYPE network SYSTEM "http://www.matsim.org/files/dtd/network_v2.dtd">\n'
+            # Modify only the capacity of the specified links
+            for link_id, from_node, to_node in links_to_modify:
+            # Match the specific link line
+            pattern = (
+                rf'(<link[^>]*\bid="{link_id}"[^>]*\bfrom="{from_node}"[^>]*\bto="{to_node}"[^>]*capacity=")([^"]+)(")'
             )
+    
+            def replace_capacity(match):
+                original = float(match.group(2))
+                new_capacity = original * capacity_tuning_factor
+                return f'{match.group(1)}{new_capacity}{match.group(3)}'
+    
+            xml_str = re.sub(pattern, replace_capacity, xml_str)
             
-            # Convert to string with proper indentation
-            xml_str = xml_declaration + ET.tostring(root, encoding='unicode')
-            
-            # Save as gzipped XML
-            with gzip.open(network_path, 'wb') as f:
-                f.write(xml_str.encode('utf-8'))
+            # Write the modified XML to a new gzipped file
+            with gzip.open(network_path, 'wt', encoding='utf-8') as f:
+                # Write XML declaration
+                f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
+                # Write DOCTYPE if necessary
+                f.write('<!DOCTYPE network SYSTEM "http://www.matsim.org/files/dtd/network_v2.dtd">\n')
+                # Write the rest of the XML content
+                f.write(xml_str)
             
             # Verify the file was created
             if not network_path.exists():
@@ -552,7 +483,6 @@ def create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_lab
     print(f"Files are organized in folders under: {seed_dir}")
     
     return first_scenario_path
-
 
 
 def plot_check_for_created_networks(check_output_subgraph_path, zones_gdf, hexagon_grid_all, 
@@ -797,13 +727,12 @@ def main():
     #generate the scenario labels
     scenario_labels = generate_scenario_labels(road_type_subsets)
     #create the scenario networks and get the first scenario path
-    first_scenario = create_scenario_networks(gdf_edges_with_hex, road_type_subsets, scenario_labels, 
-                                                    link_attrs=link_attrs,        
+    first_scenario = create_scenario_networks(matsim_network_file_path, gdf_edges_with_hex, road_type_subsets, scenario_labels, 
                                                     city_name=city_name, seed_number=seed_number, 
                                                     output_dirs=output_dirs, nodes_dict=nodes_dict, network_attrs=network_attrs,
-                             capacity_tuning_factor=capacity_tuning_factor,
-                             betweenness_centrality_cutoff=betweenness_centrality_cutoff,
-                             closeness_centrality_cutoff=closeness_centrality_cutoff)
+                                                    link_attrs=link_attrs, capacity_tuning_factor=capacity_tuning_factor,
+                                                    betweenness_centrality_cutoff=betweenness_centrality_cutoff,
+                                                    closeness_centrality_cutoff=closeness_centrality_cutoff)
     
     #### Check the created networks #######################################################################
     print(f"\nChecking first created scenario: {first_scenario.name}")
