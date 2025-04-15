@@ -460,11 +460,6 @@ def create_scenario_networks(matsim_network_file_path,gdf_edges_with_hex, road_t
             
             # Write the modified XML to a new gzipped file
             with gzip.open(network_path, 'wt', encoding='utf-8') as f:
-                # Write XML declaration
-                f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-                # Write DOCTYPE if necessary
-                f.write('<!DOCTYPE network SYSTEM "http://www.matsim.org/files/dtd/network_v2.dtd">\n')
-                # Write the rest of the XML content
                 f.write(xml_str)
             
             # Verify the file was created
