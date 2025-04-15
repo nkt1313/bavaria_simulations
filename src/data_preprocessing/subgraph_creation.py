@@ -656,9 +656,15 @@ def cross_check_for_created_networks(check_output_subgraph_path, gdf_edges_with_
         'edge_id': edges_in_selected_hexagon['link'],
         'road_type': edges_in_selected_hexagon['consolidated_road_type'],
         'original_capacity': edges_in_selected_hexagon['capacity'],
-        'modified_capacity': matsim_network[matsim_network['id'].isin(edges_in_selected_hexagon['link'])]['capacity'],
+        'modified_capacity': edges_in_selected_hexagon['link'].map(
+            lambda x: matsim_network.loc[matsim_network['id'] == x, 'capacity'].iloc[0] 
+            if x in matsim_network['id'].values else None
+        ),
         'capacity_reduced': edges_in_selected_hexagon['consolidated_road_type'] == key[0]
     })
+    
+    # Remove rows where modified_capacity is None (edges that don't exist in the modified network)
+    comparison_df = comparison_df.dropna(subset=['modified_capacity'])
     
     # Print summary statistics
     print(f"\nCross-check Summary for {scenario_label}:")
