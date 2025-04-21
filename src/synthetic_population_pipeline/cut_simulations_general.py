@@ -91,7 +91,7 @@ def cut_network_for_city(city: str, base_dir: Path) -> None:
     # Convert all paths to absolute paths
     jar_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_run.jar"
     config_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_config.xml"
-    output_path = base_dir / "data" / "simulation_data_per_city_new" / city
+    output_path = base_dir / "data" / "simulation_data_per_city_corrected" / city
     original_extent_path = base_dir / "data" / "city_boundaries" / city / f"{city}.gpkg"
     city_prefix = f"{city}_"
 
