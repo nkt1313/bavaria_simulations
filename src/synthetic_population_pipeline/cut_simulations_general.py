@@ -14,6 +14,13 @@ from shapely.geometry import MultiPolygon
 3. It reads each city's boundary from a .gpkg file and performs a geometric union to extract the outermost boundary, which is then used to cut the simulation network accordingly.
 4. It processes cities sequentially and provides detailed logging for each step. It verifies the existence and validity of required output files.
 '''
+# Paths to the jar file and config file
+base_dir = Path(__file__).parent.parent.parent
+jar_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_run.jar"
+config_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_config.xml"
+output_path = base_dir / "data" / "simulation_data_per_city_corrected" / city
+original_extent_path = base_dir / "data" / "city_boundaries" / city / f"{city}.gpkg"
+city_prefix = f"{city}_"
 
 #The list of Bavarian city names according to requirement
 cities = ['augsburg', 'nuernberg', 'regensburg', 'ingolstadt', 'fuerth', 'wuerzburg', 'erlangen', 'bamberg', 'landshut', 
@@ -88,13 +95,6 @@ def cut_network_for_city(city: str, base_dir: Path) -> None:
     """
     Cut the network for a single city using RunScenarioCutter from the jar file, in our case the bavaria_run.jar file.
     """
-    # Convert all paths to absolute paths
-    jar_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_run.jar"
-    config_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_config.xml"
-    output_path = base_dir / "data" / "simulation_data_per_city_corrected" / city
-    original_extent_path = base_dir / "data" / "city_boundaries" / city / f"{city}.gpkg"
-    city_prefix = f"{city}_"
-
     # Store the temporary file path for cleanup
     temp_extent_path = None
 
@@ -172,13 +172,12 @@ def main():
     Main function to process all cities in the cities list.
     Skips cities that have already been processed successfully.
     '''
-    base_dir = Path(__file__).parent.parent.parent
+
     processed_cities = []
     skipped_cities = []
     
     for city in cities:
         print(f"\nChecking {city}:")
-        output_path = base_dir / "data" / "simulation_data_per_city_new" / city
         city_prefix = f"{city}_"
         
         if check_city_output(output_path, city_prefix):
