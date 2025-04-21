@@ -14,13 +14,6 @@ from shapely.geometry import MultiPolygon
 3. It reads each city's boundary from a .gpkg file and performs a geometric union to extract the outermost boundary, which is then used to cut the simulation network accordingly.
 4. It processes cities sequentially and provides detailed logging for each step. It verifies the existence and validity of required output files.
 '''
-# Paths to the jar file and config file
-base_dir = Path(__file__).parent.parent.parent
-jar_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_run.jar"
-config_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_config.xml"
-output_path = base_dir / "data" / "simulation_data_per_city_corrected" / city
-original_extent_path = base_dir / "data" / "city_boundaries" / city / f"{city}.gpkg"
-city_prefix = f"{city}_"
 
 #The list of Bavarian city names according to requirement
 cities = ['augsburg', 'nuernberg', 'regensburg', 'ingolstadt', 'fuerth', 'wuerzburg', 'erlangen', 'bamberg', 'landshut', 
@@ -91,7 +84,7 @@ def get_full_extent(gpkg_path: Path) -> Path:
     return temp_file
 
 
-def cut_network_for_city(city: str, base_dir: Path) -> None:
+def cut_network_for_city(city: str, base_dir: Path, jar_path: Path, config_path: Path, output_path: Path, original_extent_path: Path, city_prefix: str) -> None:
     """
     Cut the network for a single city using RunScenarioCutter from the jar file, in our case the bavaria_run.jar file.
     """
@@ -172,14 +165,19 @@ def main():
     Main function to process all cities in the cities list.
     Skips cities that have already been processed successfully.
     '''
-
+    base_dir = Path(__file__).parent.parent.parent
+    jar_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_run.jar"
+    config_path = base_dir / "src/synthetic_population_pipeline/bavaria/output/bavaria_config.xml"
     processed_cities = []
     skipped_cities = []
     
     for city in cities:
         print(f"\nChecking {city}:")
+        # Convert all paths to absolute paths
+        output_path = base_dir / "data" / "simulation_data_per_city_corrected" / city
+        original_extent_path = base_dir / "data" / "city_boundaries" / city / f"{city}.gpkg"
         city_prefix = f"{city}_"
-        
+
         if check_city_output(output_path, city_prefix):
             print(f"Skipping {city} - all required files exist")
             skipped_cities.append(city)
@@ -187,7 +185,7 @@ def main():
             
         print(f"Processing {city} city:")
         try:
-            cut_network_for_city(city, base_dir)
+            cut_network_for_city(city, base_dir, jar_path, config_path, output_path, original_extent_path, city_prefix)
             processed_cities.append(city)
         except Exception as e:
             print(f"Error processing {city}: {e}")
